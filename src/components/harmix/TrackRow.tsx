@@ -71,7 +71,7 @@ export function TrackRow({
       >
         {selectable ? (
           <Checkbox
-            checked={selected}
+            checked={selected ?? false}
             onCheckedChange={(v) => onSelect?.(Boolean(v))}
             aria-label={`Select ${track.title}`}
           />
@@ -157,7 +157,7 @@ export function TrackRow({
             {onRemove && (
               <>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem variant="destructive" onSelect={onRemove}>
+                <DropdownMenuItem className="text-destructive focus:text-destructive" onSelect={onRemove}>
                   <Trash2 className="size-4" /> Remove from playlist
                 </DropdownMenuItem>
               </>
