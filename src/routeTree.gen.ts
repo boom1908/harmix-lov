@@ -13,6 +13,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as LibraryRouteImport } from './routes/library'
 import { Route as SearchRouteImport } from './routes/search'
 import { Route as LibraryIndexRouteImport } from './routes/library.index'
+import { Route as LibraryPlaylistIdRouteImport } from './routes/library.$playlistId'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -34,16 +35,23 @@ const LibraryIndexRoute = LibraryIndexRouteImport.update({
   path: '/',
   getParentRoute: () => LibraryRoute,
 } as any)
+const LibraryPlaylistIdRoute = LibraryPlaylistIdRouteImport.update({
+  id: '/$playlistId',
+  path: '/$playlistId',
+  getParentRoute: () => LibraryRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/library': typeof LibraryRouteWithChildren
   '/search': typeof SearchRoute
+  '/library/$playlistId': typeof LibraryPlaylistIdRoute
   '/library/': typeof LibraryIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/search': typeof SearchRoute
+  '/library/$playlistId': typeof LibraryPlaylistIdRoute
   '/library': typeof LibraryIndexRoute
 }
 export interface FileRoutesById {
@@ -51,14 +59,21 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/library': typeof LibraryRouteWithChildren
   '/search': typeof SearchRoute
+  '/library/$playlistId': typeof LibraryPlaylistIdRoute
   '/library/': typeof LibraryIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/library' | '/search' | '/library/'
+  fullPaths: '/' | '/library' | '/search' | '/library/$playlistId' | '/library/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/search' | '/library'
-  id: '__root__' | '/' | '/library' | '/search' | '/library/'
+  to: '/' | '/search' | '/library/$playlistId' | '/library'
+  id:
+    | '__root__'
+    | '/'
+    | '/library'
+    | '/search'
+    | '/library/$playlistId'
+    | '/library/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -97,14 +112,23 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LibraryIndexRouteImport
       parentRoute: typeof LibraryRoute
     }
+    '/library/$playlistId': {
+      id: '/library/$playlistId'
+      path: '/$playlistId'
+      fullPath: '/library/$playlistId'
+      preLoaderRoute: typeof LibraryPlaylistIdRouteImport
+      parentRoute: typeof LibraryRoute
+    }
   }
 }
 
 interface LibraryRouteChildren {
+  LibraryPlaylistIdRoute: typeof LibraryPlaylistIdRoute
   LibraryIndexRoute: typeof LibraryIndexRoute
 }
 
 const LibraryRouteChildren: LibraryRouteChildren = {
+  LibraryPlaylistIdRoute: LibraryPlaylistIdRoute,
   LibraryIndexRoute: LibraryIndexRoute,
 }
 
