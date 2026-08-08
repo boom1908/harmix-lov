@@ -48,6 +48,9 @@ class MainActivity : ComponentActivity() {
     @Inject
     lateinit var metadataRepository: MetadataRepository
 
+    @Inject
+    lateinit var googleAccounts: com.boom.harmix.auth.GoogleAccountsRepository
+
     private var controllerFuture: ListenableFuture<MediaController>? = null
     private var mediaController: MediaController? = null
 
@@ -66,7 +69,6 @@ class MainActivity : ComponentActivity() {
     private var canSkipNext by mutableStateOf(false)
     private var canSkipPrevious by mutableStateOf(false)
     private var playlists by mutableStateOf<List<PlaylistUi>>(emptyList())
-    private var isGuest by mutableStateOf(true)
     private var queueItems by mutableStateOf<List<QueueItemUi>>(emptyList())
     private var playlistDialogTarget by mutableStateOf<StreamItem?>(null)
     private var lyricsResult by mutableStateOf<LyricsResult?>(null)
@@ -78,6 +80,9 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         observePlaylists()
+        lifecycleScope.launch {
+            googleAccounts.mainAccount.collect { isGuest = it == null }
+        }
 
         val sessionToken = SessionToken(this, ComponentName(this, HarmixPlaybackService::class.java))
 
