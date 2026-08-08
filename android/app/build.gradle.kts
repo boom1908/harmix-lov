@@ -84,6 +84,7 @@ dependencies {
     implementation("com.google.firebase:firebase-auth-ktx")
     implementation("com.google.firebase:firebase-firestore-ktx")
     implementation("com.google.firebase:firebase-database-ktx")
+    implementation("com.google.android.gms:play-services-auth:21.2.0")
 
     // YouTube Data API sync
     implementation("com.squareup.retrofit2:retrofit:2.11.0")
