@@ -19,6 +19,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.boom.harmix.metadata.LyricLine
 import com.boom.harmix.metadata.LyricsResult
+import com.boom.harmix.ui.components.KeepScreenOn
 import com.boom.harmix.ui.theme.CoolGray
 import com.boom.harmix.ui.theme.DeepMidnight
 import com.boom.harmix.ui.theme.MistWhite
@@ -35,6 +36,9 @@ fun LyricsBottomSheet(
         onDismissRequest = onDismiss,
         containerColor = DeepMidnight
     ) {
+        // Reading lyrics shouldn't be interrupted by the screen dimming off.
+        KeepScreenOn(enabled = lyricsResult is LyricsResult.Synced || lyricsResult is LyricsResult.PlainOnly)
+
         Box(modifier = Modifier.fillMaxWidth().height(500.dp).padding(horizontal = 20.dp)) {
             when (lyricsResult) {
                 null -> Text(text = "Loading lyrics...", color = CoolGray)
