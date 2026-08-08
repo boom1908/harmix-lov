@@ -2,19 +2,31 @@ package com.boom.harmix.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-// Backgrounds
-val DeepMidnight = Color(0xFF0A1118)
-val SurfaceDark = Color(0xFF131E2A)
+// ---- Harmix "Sunset Gold on Black" palette ----
 
-// Brand
-val ZenCyan = Color(0xFF4FD1C5)
-val SkyBlue = Color(0xFF60A5FA)
-val SoftLavender = Color(0xFFA78BFA)
+// Backgrounds
+val MidnightBlack = Color(0xFF08070A)
+val SurfaceCoal = Color(0xFF15110C)
+
+// Brand (sunset gradient stops)
+val SunsetGold = Color(0xFFF5B942)
+val AmberGlow = Color(0xFFE8873B)
+val EmberRed = Color(0xFFC2542E)
+val Champagne = Color(0xFFF7E7C4)
 
 // Text
-val MistWhite = Color(0xFFF8FAFC)
-val CoolGray = Color(0xFF94A3B8)
+val Bone = Color(0xFFF7F3EC)
+val Sand = Color(0xFFA79B88)
 
-// Glassmorphism card overlay
-val GlassFill = Color(0x14FFFFFF)   // rgba(255,255,255,0.08)
-val GlassBorder = Color(0x29FFFFFF) // rgba(255,255,255,0.16)
+// Glass overlays
+val GlassFill = Color(0x12FFFFFF)
+val GlassBorder = Color(0x33F5B942)
+
+// ---- Backwards-compatible aliases (old cyan names, new sunset values) ----
+val DeepMidnight = MidnightBlack
+val SurfaceDark = SurfaceCoal
+val ZenCyan = SunsetGold
+val SkyBlue = AmberGlow
+val SoftLavender = Champagne
+val MistWhite = Bone
+val CoolGray = Sand
