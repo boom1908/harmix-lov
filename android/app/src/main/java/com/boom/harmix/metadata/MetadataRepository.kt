@@ -1,6 +1,7 @@
 package com.boom.harmix.metadata
 
 import com.boom.harmix.extractor.StreamItem
+import com.boom.harmix.core.NetworkMonitor
 import com.chaquo.python.PyException
 import com.chaquo.python.Python
 import kotlinx.coroutines.Dispatchers
@@ -18,7 +19,9 @@ sealed class LyricsResult {
 }
 
 @Singleton
-class MetadataRepository @Inject constructor() {
+class MetadataRepository @Inject constructor(
+    private val networkMonitor: NetworkMonitor
+) {
 
     suspend fun getUpNext(videoId: String, limit: Int = 10): List<StreamItem> =
         callPython("get_up_next", videoId, limit)
@@ -31,6 +34,7 @@ class MetadataRepository @Inject constructor() {
 
     suspend fun getLyrics(title: String, artist: String, durationSeconds: Int = 0): LyricsResult =
         withContext(Dispatchers.IO) {
+            if (!networkMonitor.isOnline()) return@withContext LyricsResult.NotFound
             val python = Python.getInstance()
             val metadataModule = python.getModule("metadata_engine")
 
@@ -53,6 +57,7 @@ class MetadataRepository @Inject constructor() {
 
     private suspend fun callPython(functionName: String, vararg args: Any): List<StreamItem> =
         withContext(Dispatchers.IO) {
+            networkMonitor.requireOnline()
             val python = Python.getInstance()
             val metadataModule = python.getModule("metadata_engine")
 
