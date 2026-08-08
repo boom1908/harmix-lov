@@ -69,6 +69,7 @@ class MainActivity : ComponentActivity() {
     private var canSkipNext by mutableStateOf(false)
     private var canSkipPrevious by mutableStateOf(false)
     private var playlists by mutableStateOf<List<PlaylistUi>>(emptyList())
+    private var isGuest by mutableStateOf(true)
     private var queueItems by mutableStateOf<List<QueueItemUi>>(emptyList())
     private var playlistDialogTarget by mutableStateOf<StreamItem?>(null)
     private var lyricsResult by mutableStateOf<LyricsResult?>(null)
@@ -121,8 +122,8 @@ class MainActivity : ComponentActivity() {
                         queueItems = queueItems,
                         playlists = playlists,
                         isGuest = isGuest,
-                        onSignIn = { isGuest = false },
-                        onSignOut = { isGuest = true },
+                        onSignIn = { },
+                        onSignOut = { },
                         onPlayPauseClick = ::togglePlayPause,
                         onSkipNext = { mediaController?.seekToNext() },
                         onSkipPrevious = { mediaController?.seekToPrevious() },
