@@ -40,12 +40,16 @@ import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import androidx.compose.runtime.collectAsState
+import androidx.hilt.navigation.compose.hiltViewModel
 import com.boom.harmix.data.local.PlaylistUi
 import com.boom.harmix.extractor.StreamItem
 import com.boom.harmix.metadata.LyricsResult
 import com.boom.harmix.navigation.HarmixNavHost
 import com.boom.harmix.navigation.bottomNavItemsFor
 import com.boom.harmix.playback.QueueItemUi
+import com.boom.harmix.ui.components.OfflineBanner
+import com.boom.harmix.ui.viewmodel.NetworkViewModel
 import com.boom.harmix.ui.theme.CoolGray
 import com.boom.harmix.ui.theme.GlassBorder
 import com.boom.harmix.ui.theme.GlassFill
@@ -89,6 +93,8 @@ fun MainScreen(
 ) {
     val navController = rememberNavController()
     var isFullPlayerExpanded by remember { mutableStateOf(false) }
+    val networkViewModel: NetworkViewModel = hiltViewModel()
+    val isOnline by networkViewModel.isOnline.collectAsState()
 
     BackHandler(enabled = isFullPlayerExpanded) {
         isFullPlayerExpanded = false
@@ -97,6 +103,11 @@ fun MainScreen(
     Box(modifier = Modifier.fillMaxWidth()) {
         Scaffold(
             containerColor = androidx.compose.ui.graphics.Color.Transparent,
+            topBar = {
+                if (!isOnline) {
+                    OfflineBanner(onRetry = { networkViewModel.recheck() })
+                }
+            },
             bottomBar = {
                 Column {
                     MiniPlayer(
