@@ -78,7 +78,11 @@ fun SearchScreen(
             when (val state = uiState) {
                 is SearchUiState.Idle -> Text(text = "Search results will show up here.", color = CoolGray)
                 is SearchUiState.Loading -> Text(text = "Searching...", color = CoolGray)
-                is SearchUiState.Error -> Text(text = "Search failed: ${state.message}", color = CoolGray)
+                is SearchUiState.Error -> com.boom.harmix.ui.components.ErrorRetryPanel(
+                    message = state.message,
+                    isOffline = state.offline,
+                    onRetry = { viewModel.runSearch() }
+                )
                 is SearchUiState.Success -> {
                     LazyColumn {
                         items(state.items) { item ->

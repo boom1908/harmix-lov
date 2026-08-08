@@ -15,7 +15,7 @@ sealed class SearchUiState {
     data object Idle : SearchUiState()
     data object Loading : SearchUiState()
     data class Success(val items: List<StreamItem>) : SearchUiState()
-    data class Error(val message: String) : SearchUiState()
+    data class Error(val message: String, val offline: Boolean = false) : SearchUiState()
 }
 
 @HiltViewModel
@@ -46,6 +46,8 @@ class SearchViewModel @Inject constructor(
                 } else {
                     SearchUiState.Success(results)
                 }
+            } catch (e: com.boom.harmix.core.OfflineException) {
+                _uiState.value = SearchUiState.Error(e.message ?: "You're offline.", offline = true)
             } catch (e: Exception) {
                 _uiState.value = SearchUiState.Error(e.message ?: "Unknown search error")
             }

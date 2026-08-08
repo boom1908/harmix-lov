@@ -14,7 +14,7 @@ import javax.inject.Inject
 sealed class HomeUiState {
     data object Loading : HomeUiState()
     data class Success(val items: List<StreamItem>) : HomeUiState()
-    data class Error(val message: String) : HomeUiState()
+    data class Error(val message: String, val offline: Boolean = false) : HomeUiState()
 }
 
 @HiltViewModel
@@ -26,6 +26,11 @@ class HomeViewModel @Inject constructor(
     val uiState: StateFlow<HomeUiState> = _uiState.asStateFlow()
 
     private var loaded = false
+
+    fun retry() {
+        loaded = false
+        loadRecommendations()
+    }
 
     fun loadRecommendations() {
         if (loaded) return
@@ -40,6 +45,8 @@ class HomeViewModel @Inject constructor(
                 } else {
                     HomeUiState.Success(trending)
                 }
+            } catch (e: com.boom.harmix.core.OfflineException) {
+                _uiState.value = HomeUiState.Error(e.message ?: "You're offline.", offline = true)
             } catch (e: Exception) {
                 _uiState.value = HomeUiState.Error(e.message ?: "Unknown error fetching trending tracks")
             }

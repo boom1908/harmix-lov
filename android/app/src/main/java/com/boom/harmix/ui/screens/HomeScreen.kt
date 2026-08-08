@@ -69,7 +69,11 @@ fun HomeScreen(
 
         when (val state = uiState) {
             is HomeUiState.Loading -> Text(text = "Loading recommendations...", color = CoolGray)
-            is HomeUiState.Error -> HomeStatusBanner(title = "Trending feed failed to load", detail = state.message)
+            is HomeUiState.Error -> com.boom.harmix.ui.components.ErrorRetryPanel(
+                message = state.message,
+                isOffline = state.offline,
+                onRetry = { viewModel.retry() }
+            )
             is HomeUiState.Success -> {
                 if (state.items.isEmpty()) {
                     HomeStatusBanner(title = "Trending feed returned no tracks", detail = "Try again shortly.")
