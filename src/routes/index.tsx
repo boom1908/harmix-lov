@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { Bell, Play, Shuffle } from "lucide-react";
 import { MediaCard, Shelf } from "@/components/harmix/MediaCard";
