@@ -47,7 +47,8 @@ class YtMusicSyncRepository @Inject constructor(
 
             for (i in 0 until items.length()) {
                 val playlist = items.optJSONObject(i) ?: continue
-                val playlistId = playlist.optString("id").ifBlank { continue }
+                val playlistId = playlist.optString("id")
+                if (playlistId.isBlank()) continue
                 val name = playlist.optJSONObject("snippet")?.optString("title").orEmpty()
                     .ifBlank { "YouTube playlist" }
 
