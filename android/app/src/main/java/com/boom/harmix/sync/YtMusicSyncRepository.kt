@@ -1,6 +1,7 @@
 package com.boom.harmix.sync
 
 import com.boom.harmix.auth.GoogleAccountsRepository
+import com.boom.harmix.auth.YtTokenResult
 import com.boom.harmix.core.NetworkMonitor
 import com.boom.harmix.data.local.LibraryRepository
 import com.boom.harmix.extractor.StreamItem
@@ -9,10 +10,15 @@ import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.json.JSONObject
+import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import javax.inject.Singleton
 
 data class SyncSummary(val playlists: Int, val songs: Int)
+
+/** Google needs the user to approve the YouTube scope: launch [intent]. */
+class YtConsentRequiredException(val intent: android.content.Intent) :
+    Exception("Google needs your permission to read YouTube playlists.")
 
 /**
  * Pulls the playlists of the *YouTube sync* Google account (never the main
@@ -25,12 +31,21 @@ class YtMusicSyncRepository @Inject constructor(
     private val networkMonitor: NetworkMonitor
 ) {
 
-    private val http = OkHttpClient()
+    private val http = OkHttpClient.Builder()
+        .connectTimeout(15, TimeUnit.SECONDS)
+        .readTimeout(20, TimeUnit.SECONDS)
+        .callTimeout(25, TimeUnit.SECONDS)
+        .build()
 
     suspend fun syncPlaylists(): SyncSummary = withContext(Dispatchers.IO) {
         networkMonitor.requireOnline()
-        val token = accounts.youtubeAccessToken()
-            ?: throw IllegalStateException("Connect a Google account for YouTube Music sync first.")
+        val token = when (val result = accounts.youtubeAccessToken()) {
+            is YtTokenResult.Success -> result.token
+            is YtTokenResult.NeedsConsent -> throw YtConsentRequiredException(result.intent)
+            is YtTokenResult.NotConnected ->
+                throw IllegalStateException("Connect a Google account for YouTube Music sync first.")
+            is YtTokenResult.Error -> throw IllegalStateException(result.message)
+        }
 
         var playlistCount = 0
         var songCount = 0

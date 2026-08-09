@@ -9,7 +9,10 @@ import com.boom.harmix.auth.GoogleAccountsRepository
 import com.boom.harmix.core.NetworkMonitor
 import com.boom.harmix.core.OfflineException
 import com.boom.harmix.sync.YtMusicSyncRepository
+import com.boom.harmix.sync.YtConsentRequiredException
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -21,6 +24,8 @@ sealed class SyncState {
     data object Syncing : SyncState()
     data class Done(val playlists: Int, val songs: Int) : SyncState()
     data class Failed(val message: String, val offline: Boolean) : SyncState()
+    /** Google asked for extra consent — the screen must launch this intent. */
+    data class NeedsConsent(val intent: Intent) : SyncState()
 }
 
 @HiltViewModel
@@ -56,13 +61,25 @@ class AccountViewModel @Inject constructor(
         viewModelScope.launch {
             _syncState.value = SyncState.Syncing
             _syncState.value = try {
-                val summary = ytSync.syncPlaylists()
+                val summary = withTimeout(20_000) { ytSync.syncPlaylists() }
                 SyncState.Done(summary.playlists, summary.songs)
+            } catch (e: YtConsentRequiredException) {
+                SyncState.NeedsConsent(e.intent)
+            } catch (e: TimeoutCancellationException) {
+                android.util.Log.e("HarmixSync", "YouTube sync timed out", e)
+                SyncState.Failed("Timed out after 20s. Check your connection and try again.", offline = false)
             } catch (e: OfflineException) {
                 SyncState.Failed(e.message ?: "You're offline.", offline = true)
             } catch (e: Exception) {
-                SyncState.Failed(e.message ?: "Sync failed.", offline = false)
+                android.util.Log.e("HarmixSync", "YouTube sync failed", e)
+                SyncState.Failed(e.message ?: "Sync failed (${e::class.java.simpleName}).", offline = false)
             }
         }
+    }
+
+    /** Called after the user finishes the Google consent screen. */
+    fun onConsentResult(granted: Boolean) {
+        if (granted) syncNow()
+        else _syncState.value = SyncState.Failed("Permission denied for YouTube access.", offline = false)
     }
 }

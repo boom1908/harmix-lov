@@ -1,25 +1,44 @@
 {
   "project_info": {
-    "project_number": "123456789",
-    "project_id": "harmix-dev"
+    "project_number": "308449061407",
+    "project_id": "harmix-504905",
+    "storage_bucket": "harmix-504905.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:123456789:android:abcdef123456",
+        "mobilesdk_app_id": "1:308449061407:android:ab5abc6b0ba5464bab032a",
         "android_client_info": {
           "package_name": "com.boom.harmix"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "308449061407-srhsfobui0lrpkq78nm2603i5tim4snm.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.boom.harmix",
+            "certificate_hash": "d16a5f3f11a58b3c75af044440092ca70f96a928"
+          }
+        },
+        {
+          "client_id": "308449061407-kt6ncig4t96s1fvki4384m143i33j050.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
-          "current_key": "dummy-key-for-build"
+          "current_key": "AIzaSyBEFcJR8J1ILby3ypnXlcoD3pDLzVWN7WY"
         }
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "308449061407-kt6ncig4t96s1fvki4384m143i33j050.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
         }
       }
     }

@@ -74,6 +74,18 @@ fun AccountScreen(viewModel: AccountViewModel = hiltViewModel()) {
         }
     }
 
+    val consentLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        viewModel.onConsentResult(result.resultCode == Activity.RESULT_OK)
+    }
+
+    // Google asked for extra permission: show its screen instead of spinning forever.
+    androidx.compose.runtime.LaunchedEffect(syncState) {
+        val state = syncState
+        if (state is SyncState.NeedsConsent) consentLauncher.launch(state.intent)
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -222,6 +234,12 @@ private fun YouTubeSyncCard(
                     colors = ButtonDefaults.outlinedButtonColors(contentColor = SunsetGold)
                 ) { Text(text = "Retry sync") }
             }
+
+            is SyncState.NeedsConsent -> Text(
+                text = "Waiting for your Google permission…",
+                color = SunsetGold,
+                style = MaterialTheme.typography.bodySmall
+            )
 
             SyncState.Idle -> Unit
         }

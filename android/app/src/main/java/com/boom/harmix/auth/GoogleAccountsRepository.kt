@@ -3,13 +3,17 @@ package com.boom.harmix.auth
 import android.accounts.Account
 import android.content.Context
 import android.content.Intent
+import android.util.Log
 import com.google.android.gms.auth.GoogleAuthUtil
+import com.google.android.gms.auth.UserRecoverableAuthException
+import com.google.android.gms.auth.GoogleAuthException
 import com.google.android.gms.auth.api.signin.GoogleSignIn
 import com.google.android.gms.auth.api.signin.GoogleSignInClient
 import com.google.android.gms.auth.api.signin.GoogleSignInOptions
 import com.google.android.gms.common.api.Scope
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -26,6 +30,18 @@ data class GoogleAccountInfo(
 
 /** Which of the two independent Google slots a sign-in belongs to. */
 enum class AccountSlot { MAIN, YT_SYNC }
+
+/** Outcome of asking Google for a YouTube access token. Never silently null. */
+sealed class YtTokenResult {
+    data class Success(val token: String) : YtTokenResult()
+    /** Google needs the user to approve the YouTube scope: launch this intent. */
+    data class NeedsConsent(val intent: Intent) : YtTokenResult()
+    data object NotConnected : YtTokenResult()
+    data class Error(val message: String) : YtTokenResult()
+}
+
+private const val TAG = "HarmixGoogleAuth"
+private const val TOKEN_TIMEOUT_MS = 15_000L
 
 private const val PREFS = "harmix_google_accounts"
 private const val YT_SCOPE = "https://www.googleapis.com/auth/youtube.readonly"
@@ -89,12 +105,37 @@ class GoogleAccountsRepository @Inject constructor(
         write(slot, null)
     }
 
-    /** OAuth access token for the YouTube Data API, for the connected sync account only. */
-    suspend fun youtubeAccessToken(): String? = withContext(Dispatchers.IO) {
-        val email = _ytAccount.value?.email ?: return@withContext null
-        runCatching {
-            GoogleAuthUtil.getToken(context, Account(email, "com.google"), "oauth2:$YT_SCOPE")
-        }.getOrNull()
+    /**
+     * OAuth access token for the YouTube Data API, for the connected sync account only.
+     * Surfaces every failure instead of hiding it, and gives up after 15 seconds so the
+     * UI can never spin forever.
+     */
+    suspend fun youtubeAccessToken(): YtTokenResult = withContext(Dispatchers.IO) {
+        val email = _ytAccount.value?.email ?: return@withContext YtTokenResult.NotConnected
+
+        val result = withTimeoutOrNull(TOKEN_TIMEOUT_MS) {
+            try {
+                val token = GoogleAuthUtil.getToken(
+                    context,
+                    Account(email, "com.google"),
+                    "oauth2:$YT_SCOPE"
+                )
+                YtTokenResult.Success(token)
+            } catch (e: UserRecoverableAuthException) {
+                Log.w(TAG, "YouTube token needs user consent", e)
+                val intent = e.intent
+                if (intent != null) YtTokenResult.NeedsConsent(intent)
+                else YtTokenResult.Error(e.message ?: "Google needs extra permission.")
+            } catch (e: GoogleAuthException) {
+                Log.e(TAG, "Google auth error while getting YouTube token", e)
+                YtTokenResult.Error("Google sign-in error: ${e.message ?: e::class.java.simpleName}")
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to get YouTube token", e)
+                YtTokenResult.Error("Couldn't get YouTube access: ${e.message ?: e::class.java.simpleName}")
+            }
+        }
+
+        result ?: YtTokenResult.Error("Google took too long to respond. Please try again.")
     }
 
     private fun clientFor(slot: AccountSlot): GoogleSignInClient {
