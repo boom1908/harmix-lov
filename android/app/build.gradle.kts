@@ -13,6 +13,16 @@ android {
     namespace = "com.boom.harmix"
     compileSdk = 35
 
+    signingConfigs {
+        getByName("debug") {
+            // Fixed debug keystore committed to the repo so the SHA-1 never changes.
+            storeFile = rootProject.file("keystore/debug.keystore")
+            storePassword = "android"
+            keyAlias = "androiddebugkey"
+            keyPassword = "android"
+        }
+    }
+
     defaultConfig {
         applicationId = "com.boom.harmix"
         minSdk = 26
@@ -22,6 +32,12 @@ android {
 
         ndk {
             abiFilters += listOf("arm64-v8a", "x86_64")
+        }
+    }
+
+    buildTypes {
+        getByName("debug") {
+            signingConfig = signingConfigs.getByName("debug")
         }
     }
 
