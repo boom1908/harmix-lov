@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { Bell, Play, Shuffle } from "lucide-react";
 import { MediaCard, Shelf } from "@/components/harmix/MediaCard";
@@ -41,7 +42,7 @@ function Index() {
         <div className="relative flex items-start justify-between">
           <div>
             <p className="text-xs uppercase tracking-[0.24em] text-muted-foreground">
-              {greeting()}
+              {useGreeting()}
             </p>
             <h1 className="font-display text-4xl tracking-wide gold-text">Harmix</h1>
           </div>
@@ -149,9 +150,11 @@ function Index() {
   );
 }
 
-function greeting() {
-  const hour = new Date().getHours();
-  if (hour < 12) return "Good morning";
-  if (hour < 18) return "Good afternoon";
-  return "Good evening";
+function useGreeting() {
+  const [greeting, setGreeting] = useState("Welcome back");
+  useEffect(() => {
+    const hour = new Date().getHours();
+    setGreeting(hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening");
+  }, []);
+  return greeting;
 }

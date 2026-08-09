@@ -31,6 +31,12 @@ private const val PREFS = "harmix_google_accounts"
 private const val YT_SCOPE = "https://www.googleapis.com/auth/youtube.readonly"
 
 /**
+ * Web (server) OAuth client ID from Google Cloud. Required so Google Sign-In
+ * issues a real ID token that Firebase / our backend can verify.
+ */
+const val WEB_CLIENT_ID = "308449061407-kt6ncig4t96s1fvki4384m143i33j050.apps.googleusercontent.com"
+
+/**
  * Handles TWO completely independent Google sign-ins:
  *  - MAIN: the Harmix account (listening history, playlists, liked songs).
  *  - YT_SYNC: a throwaway/second account only used to pull YouTube Music playlists.
@@ -97,12 +103,14 @@ class GoogleAccountsRepository @Inject constructor(
                 GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
                     .requestEmail()
                     .requestProfile()
+                    .requestIdToken(WEB_CLIENT_ID)
                     .build()
 
             AccountSlot.YT_SYNC ->
                 GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
                     .requestEmail()
                     .requestProfile()
+                    .requestIdToken(WEB_CLIENT_ID)
                     .requestScopes(Scope(YT_SCOPE))
                     .build()
         }
