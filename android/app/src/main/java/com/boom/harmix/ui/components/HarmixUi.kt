@@ -85,7 +85,7 @@ fun PageHeader(
         modifier = Modifier
             .fillMaxWidth()
             .background(HeaderGlow)
-            .padding(horizontal = 20.dp, top = 22.dp, bottom = 16.dp)
+            .padding(start = 20.dp, top = 22.dp, end = 20.dp, bottom = 16.dp)
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
             if (showLogo) {
