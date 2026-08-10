@@ -9,21 +9,21 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -34,6 +34,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavDestination.Companion.hierarchy
@@ -48,13 +49,16 @@ import com.boom.harmix.metadata.LyricsResult
 import com.boom.harmix.navigation.HarmixNavHost
 import com.boom.harmix.navigation.bottomNavItemsFor
 import com.boom.harmix.playback.QueueItemUi
+import com.boom.harmix.ui.components.Artwork
 import com.boom.harmix.ui.components.OfflineBanner
+import com.boom.harmix.ui.components.SunsetBrush
+import com.boom.harmix.ui.theme.Bone
+import com.boom.harmix.ui.theme.MidnightBlack
+import com.boom.harmix.ui.theme.Sand
+import com.boom.harmix.ui.theme.SunsetGold
 import com.boom.harmix.ui.viewmodel.NetworkViewModel
-import com.boom.harmix.ui.theme.CoolGray
 import com.boom.harmix.ui.theme.GlassBorder
 import com.boom.harmix.ui.theme.GlassFill
-import com.boom.harmix.ui.theme.MistWhite
-import com.boom.harmix.ui.theme.ZenCyan
 
 @Composable
 fun MainScreen(
@@ -112,6 +116,8 @@ fun MainScreen(
                 Column {
                     MiniPlayer(
                         songTitle = currentSongTitle,
+                        artist = currentArtist,
+                        artworkUrl = currentArtworkUrl,
                         isPlaying = isPlaying,
                         isBuffering = isBuffering,
                         onPlayPauseClick = onPlayPauseClick,
@@ -181,43 +187,68 @@ fun MainScreen(
 @Composable
 private fun MiniPlayer(
     songTitle: String,
+    artist: String,
+    artworkUrl: String?,
     isPlaying: Boolean,
     isBuffering: Boolean,
     onPlayPauseClick: () -> Unit,
     onExpandClick: () -> Unit
 ) {
+    val idle = songTitle == "Nothing playing"
+    val shape = RoundedCornerShape(22.dp)
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 12.dp, vertical = 6.dp)
-            .height(64.dp)
-            .clip(RoundedCornerShape(20.dp))
+            .height(68.dp)
+            .clip(shape)
             .background(GlassFill)
-            .border(1.dp, GlassBorder, RoundedCornerShape(20.dp))
+            .border(1.dp, GlassBorder, shape)
             .clickable(onClick = onExpandClick)
-            .padding(horizontal = 16.dp),
+            .padding(horizontal = 10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(
-            text = songTitle,
-            color = if (songTitle == "Nothing playing") CoolGray else MistWhite,
-            maxLines = 1,
-            modifier = Modifier.weight(1f)
-        )
+        Artwork(artworkUrl, songTitle, modifier = Modifier.size(48.dp))
+        Column(modifier = Modifier.weight(1f).padding(horizontal = 12.dp)) {
+            Text(
+                text = songTitle,
+                color = if (idle) Sand else Bone,
+                fontWeight = FontWeight.SemiBold,
+                style = MaterialTheme.typography.bodyMedium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            if (!idle) {
+                Text(
+                    text = artist.ifBlank { "Unknown artist" },
+                    color = Sand,
+                    style = MaterialTheme.typography.bodySmall,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
 
-        // Only show buffering spinner if we are NOT actively playing audio
         if (isBuffering && !isPlaying) {
             CircularProgressIndicator(
-                color = ZenCyan,
+                color = SunsetGold,
                 strokeWidth = 2.dp,
                 modifier = Modifier.size(24.dp)
             )
+            Spacer(Modifier.size(12.dp))
         } else {
-            IconButton(onClick = onPlayPauseClick) {
+            Box(
+                modifier = Modifier
+                    .size(42.dp)
+                    .clip(CircleShape)
+                    .background(SunsetBrush)
+                    .clickable(onClick = onPlayPauseClick),
+                contentAlignment = Alignment.Center
+            ) {
                 Icon(
                     imageVector = if (isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
                     contentDescription = if (isPlaying) "Pause" else "Play",
-                    tint = ZenCyan
+                    tint = MidnightBlack
                 )
             }
         }
@@ -227,44 +258,61 @@ private fun MiniPlayer(
 @Composable
 private fun HarmixBottomBar(navController: androidx.navigation.NavHostController, isGuest: Boolean) {
     val items = bottomNavItemsFor(isGuest)
+    val navBackStackEntry by navController.currentBackStackEntryAsState()
+    val currentDestination = navBackStackEntry?.destination
+    val shape = RoundedCornerShape(topStart = 26.dp, topEnd = 26.dp)
 
-    NavigationBar(
-        containerColor = GlassFill,
+    Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
-            .border(1.dp, GlassBorder, RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
+            .clip(shape)
+            .background(MidnightBlack)
+            .border(1.dp, GlassBorder, shape)
+            .padding(horizontal = 8.dp, vertical = 10.dp),
+        horizontalArrangement = Arrangement.SpaceEvenly,
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        val navBackStackEntry by navController.currentBackStackEntryAsState()
-        val currentDestination = navBackStackEntry?.destination
-
         items.forEach { destination ->
             val selected = currentDestination?.hierarchy?.any { it.route == destination.route } == true
-            NavigationBarItem(
-                selected = selected,
-                onClick = {
-                    navController.navigate(destination.route) {
-                        popUpTo(navController.graph.findStartDestination().id) { saveState = true }
-                        launchSingleTop = true
-                        restoreState = true
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .clip(RoundedCornerShape(18.dp))
+                    .clickable {
+                        navController.navigate(destination.route) {
+                            popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+                            launchSingleTop = true
+                            restoreState = true
+                        }
                     }
-                },
-                icon = { Icon(destination.icon, contentDescription = destination.label) },
-                label = { 
-                    Text(
-                        text = destination.label,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    ) 
-                },
-                colors = NavigationBarItemDefaults.colors(
-                    selectedIconColor = ZenCyan,
-                    selectedTextColor = ZenCyan,
-                    unselectedIconColor = CoolGray,
-                    unselectedTextColor = CoolGray,
-                    indicatorColor = androidx.compose.ui.graphics.Color.Transparent
+                    .padding(vertical = 6.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Box(
+                    modifier = Modifier
+                        .height(30.dp)
+                        .clip(CircleShape)
+                        .then(if (selected) Modifier.background(SunsetBrush) else Modifier)
+                        .padding(horizontal = 18.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        destination.icon,
+                        contentDescription = destination.label,
+                        tint = if (selected) MidnightBlack else Sand,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+                Text(
+                    text = destination.label,
+                    color = if (selected) SunsetGold else Sand,
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(top = 3.dp)
                 )
-            )
+            }
         }
     }
 }
