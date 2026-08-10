@@ -4,21 +4,25 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.LibraryMusic
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -29,16 +33,25 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.boom.harmix.data.local.PlaylistUi
 import com.boom.harmix.extractor.StreamItem
-import com.boom.harmix.ui.theme.CoolGray
+import com.boom.harmix.ui.components.EmptyState
+import com.boom.harmix.ui.components.HarmixChip
+import com.boom.harmix.ui.components.PageHeader
+import com.boom.harmix.ui.components.SunsetBrush
+import com.boom.harmix.ui.components.TrackRow
+import com.boom.harmix.ui.theme.Bone
+import com.boom.harmix.ui.theme.EmberRed
 import com.boom.harmix.ui.theme.GlassBorder
 import com.boom.harmix.ui.theme.GlassFill
-import com.boom.harmix.ui.theme.MistWhite
-import com.boom.harmix.ui.theme.ZenCyan
+import com.boom.harmix.ui.theme.MidnightBlack
+import com.boom.harmix.ui.theme.Sand
 import com.boom.harmix.ui.viewmodel.LibraryViewModel
 
 @Composable
@@ -47,55 +60,72 @@ fun LibraryScreen(
     onPlayQueue: (List<StreamItem>, Int) -> Unit
 ) {
     val playlists by viewModel.playlists.collectAsStateWithLifecycle()
+    val savedSongs by viewModel.savedSongs.collectAsStateWithLifecycle()
     var showCreateDialog by remember { mutableStateOf(false) }
+    var tab by remember { mutableStateOf("Playlists") }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(20.dp)
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column {
-                Text(
-                    text = "Your Library",
-                    color = MistWhite,
-                    style = MaterialTheme.typography.headlineSmall
-                )
-                Text(
-                    text = "My Playlists",
-                    color = CoolGray,
-                    style = MaterialTheme.typography.bodyMedium,
-                    modifier = Modifier.padding(top = 4.dp)
-                )
+    Column(modifier = Modifier.fillMaxSize()) {
+        PageHeader(
+            title = "Your Library",
+            subtitle = "${playlists.size} playlists · ${savedSongs.size} songs",
+            trailing = {
+                Box(
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(CircleShape)
+                        .background(SunsetBrush)
+                        .clickable { showCreateDialog = true },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(Icons.Filled.Add, contentDescription = "Create playlist", tint = MidnightBlack)
+                }
             }
-            IconButton(onClick = { showCreateDialog = true }) {
-                Icon(imageVector = Icons.Filled.Add, contentDescription = "Create playlist", tint = ZenCyan)
+        )
+
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 6.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            listOf("Playlists", "Songs").forEach { label ->
+                HarmixChip(text = label, selected = tab == label) { tab = label }
             }
         }
 
-        androidx.compose.foundation.layout.Spacer(modifier = Modifier.padding(top = 16.dp))
-
-        if (playlists.isEmpty()) {
-            EmptyLibraryState(onCreateClick = { showCreateDialog = true })
-        } else {
-            LazyVerticalGrid(
-                columns = GridCells.Fixed(2),
-                horizontalArrangement = Arrangement.spacedBy(16.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
-                items(playlists) { playlist ->
-                    PlaylistGridCard(
-                        playlist = playlist,
-                        onClick = {
-                            if (playlist.songs.isNotEmpty()) {
-                                onPlayQueue(playlist.songs, 0)
-                            }
+        if (tab == "Playlists") {
+            if (playlists.isEmpty()) {
+                EmptyState(
+                    title = "No playlists yet",
+                    detail = "Tap the gold + button to create your first one."
+                )
+            } else {
+                LazyVerticalGrid(
+                    columns = GridCells.Fixed(2),
+                    contentPadding = androidx.compose.foundation.layout.PaddingValues(20.dp),
+                    horizontalArrangement = Arrangement.spacedBy(14.dp),
+                    verticalArrangement = Arrangement.spacedBy(14.dp)
+                ) {
+                    items(playlists) { playlist ->
+                        PlaylistCard(playlist) {
+                            if (playlist.songs.isNotEmpty()) onPlayQueue(playlist.songs, 0)
                         }
-                    )
+                    }
+                }
+            }
+        } else {
+            if (savedSongs.isEmpty()) {
+                EmptyState(title = "No saved songs", detail = "Save songs from the player to see them here.")
+            } else {
+                LazyColumn(
+                    contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 6.dp)
+                ) {
+                    items(savedSongs) { song ->
+                        TrackRow(
+                            title = song.title,
+                            subtitle = song.uploader,
+                            artworkUrl = song.thumbnailUrl,
+                            onClick = { onPlayQueue(savedSongs, savedSongs.indexOf(song)) }
+                        )
+                    }
                 }
             }
         }
@@ -113,66 +143,43 @@ fun LibraryScreen(
 }
 
 @Composable
-private fun EmptyLibraryState(onCreateClick: () -> Unit) {
+private fun PlaylistCard(playlist: PlaylistUi, onClick: () -> Unit) {
+    val shape = RoundedCornerShape(20.dp)
     Column(
         modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(20.dp))
+            .clip(shape)
             .background(GlassFill)
-            .border(1.dp, GlassBorder, RoundedCornerShape(20.dp))
-            .clickable(onClick = onCreateClick)
-            .padding(24.dp)
-    ) {
-        Icon(
-            imageVector = Icons.Filled.LibraryMusic,
-            contentDescription = null,
-            tint = ZenCyan,
-            modifier = Modifier.size(40.dp)
-        )
-        Text(
-            text = "No playlists yet",
-            color = MistWhite,
-            style = MaterialTheme.typography.titleMedium,
-            modifier = Modifier.padding(top = 12.dp)
-        )
-        Text(
-            text = "Tap here to create your first one. You'll be able to add songs from the full-screen player.",
-            color = CoolGray,
-            style = MaterialTheme.typography.bodyMedium,
-            modifier = Modifier.padding(top = 4.dp)
-        )
-    }
-}
-
-@Composable
-private fun PlaylistGridCard(
-    playlist: PlaylistUi,
-    onClick: () -> Unit
-) {
-    Column(
-        modifier = Modifier
-            .clip(RoundedCornerShape(20.dp))
-            .background(GlassFill)
-            .border(1.dp, GlassBorder, RoundedCornerShape(20.dp))
+            .border(1.dp, GlassBorder, shape)
             .clickable(onClick = onClick)
-            .padding(16.dp)
+            .padding(12.dp)
     ) {
-        Icon(
-            imageVector = Icons.Filled.LibraryMusic,
-            contentDescription = playlist.name,
-            tint = ZenCyan,
-            modifier = Modifier.size(40.dp)
-        )
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .aspectRatio(1f)
+                .clip(RoundedCornerShape(16.dp))
+                .background(Brush.linearGradient(listOf(EmberRed.copy(alpha = .55f), MidnightBlack))),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                Icons.Filled.LibraryMusic,
+                contentDescription = playlist.name,
+                tint = com.boom.harmix.ui.theme.SunsetGold,
+                modifier = Modifier.size(34.dp)
+            )
+        }
         Text(
             text = playlist.name,
-            color = MistWhite,
+            color = Bone,
             style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.SemiBold,
             maxLines = 1,
-            modifier = Modifier.padding(top = 12.dp)
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(top = 10.dp)
         )
         Text(
             text = "${playlist.songs.size} songs",
-            color = CoolGray,
+            color = Sand,
             style = MaterialTheme.typography.bodySmall
         )
     }
