@@ -13,11 +13,14 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
+import androidx.navigation.NavType
 import androidx.navigation.compose.composable
+import androidx.navigation.navArgument
 import com.boom.harmix.extractor.StreamItem
 import com.boom.harmix.ui.screens.AccountScreen
 import com.boom.harmix.ui.screens.HomeScreen
 import com.boom.harmix.ui.screens.LibraryScreen
+import com.boom.harmix.ui.screens.PlaylistDetailScreen
 import com.boom.harmix.ui.screens.SearchScreen
 
 sealed class HarmixDestination(val route: String, val label: String, val icon: ImageVector) {
@@ -72,7 +75,20 @@ fun HarmixNavHost(
             )
         }
         composable(HarmixDestination.Library.route) {
-            LibraryScreen(onPlayQueue = onPlayQueue)
+            LibraryScreen(
+                onPlayQueue = onPlayQueue,
+                onOpenPlaylist = { playlistId -> navController.navigate("playlist/$playlistId") }
+            )
+        }
+        composable(
+            route = "playlist/{playlistId}",
+            arguments = listOf(navArgument("playlistId") { type = NavType.StringType })
+        ) {
+            PlaylistDetailScreen(
+                onBack = { navController.popBackStack() },
+                onPlayQueue = onPlayQueue,
+                onAddToQueue = onAddToQueue
+            )
         }
         composable(HarmixDestination.Account.route) {
             AccountScreen()

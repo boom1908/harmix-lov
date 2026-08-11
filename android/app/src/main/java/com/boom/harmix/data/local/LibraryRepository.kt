@@ -7,6 +7,7 @@ import com.boom.harmix.data.local.entity.PlaylistSongCrossRef
 import com.boom.harmix.data.local.entity.SavedSongEntity
 import com.boom.harmix.extractor.StreamItem
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -26,12 +27,30 @@ class LibraryRepository @Inject constructor(
     fun getSavedSongs(): Flow<List<StreamItem>> =
         savedSongDao.getAllSongs().map { list -> list.map { it.toStreamItem() } }
 
+    fun getLikedSongs(): Flow<List<StreamItem>> =
+        savedSongDao.getLikedSongs().map { list -> list.map { it.toStreamItem() } }
+
+    fun getLikedUrls(): Flow<Set<String>> = savedSongDao.getLikedUrls().map { it.toSet() }
+
     suspend fun saveSong(item: StreamItem) {
-        savedSongDao.insertSong(item.toEntity())
+        savedSongDao.insertSong(item.toEntity(liked = true))
     }
 
     suspend fun removeSong(item: StreamItem) {
         savedSongDao.deleteSongByUrl(item.url)
+    }
+
+    /** Heart toggle used by the player and track rows. */
+    suspend fun toggleLike(item: StreamItem): Boolean {
+        val alreadySaved = savedSongDao.isSongSaved(item.url)
+        return if (!alreadySaved) {
+            savedSongDao.insertSong(item.toEntity(liked = true))
+            true
+        } else {
+            val liked = savedSongDao.isLiked(item.url)
+            savedSongDao.setLiked(item.url, !liked)
+            !liked
+        }
     }
 
     suspend fun isSongSaved(url: String): Boolean = savedSongDao.isSongSaved(url)
@@ -47,11 +66,27 @@ class LibraryRepository @Inject constructor(
             }
         }
 
+    /** Single playlist with its songs in saved order. */
+    fun getPlaylist(playlistId: Long): Flow<PlaylistUi?> =
+        combine(
+            playlistDao.getPlaylist(playlistId),
+            playlistDao.getPlaylistSongs(playlistId)
+        ) { playlist, songs ->
+            playlist?.let {
+                PlaylistUi(it.playlistId, it.name, songs.map { song -> song.toStreamItem() })
+            }
+        }
+
     suspend fun createPlaylist(name: String): Long =
         playlistDao.insertPlaylist(PlaylistEntity(name = name))
 
+    suspend fun renamePlaylist(playlistId: Long, name: String) {
+        if (name.isNotBlank()) playlistDao.renamePlaylist(playlistId, name)
+    }
+
     suspend fun addSongToPlaylist(playlistId: Long, item: StreamItem) {
-        savedSongDao.insertSong(item.toEntity())
+        savedSongDao.insertSongIfAbsent(item.toEntity())
+        if (playlistDao.isSongInPlaylist(playlistId, item.url)) return
         val nextPosition = playlistDao.getNextPosition(playlistId)
         playlistDao.addSongToPlaylist(
             PlaylistSongCrossRef(playlistId = playlistId, songUrl = item.url, position = nextPosition)
@@ -74,9 +109,10 @@ private fun SavedSongEntity.toStreamItem() = StreamItem(
     uploader = uploader
 )
 
-private fun StreamItem.toEntity() = SavedSongEntity(
+private fun StreamItem.toEntity(liked: Boolean = false) = SavedSongEntity(
     url = url,
     title = title,
     thumbnailUrl = thumbnailUrl,
-    uploader = uploader
+    uploader = uploader,
+    liked = liked
 )

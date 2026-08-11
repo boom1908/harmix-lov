@@ -9,5 +9,7 @@ data class SavedSongEntity(
     val title: String,
     val thumbnailUrl: String?,
     val uploader: String,
-    val savedAtMillis: Long = System.currentTimeMillis()
+    val savedAtMillis: Long = System.currentTimeMillis(),
+    /** True when the user tapped the heart — "Liked songs" in the library. */
+    val liked: Boolean = false
 )

@@ -20,6 +20,9 @@ class LibraryViewModel @Inject constructor(
     val savedSongs: StateFlow<List<StreamItem>> = libraryRepository.getSavedSongs()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    val likedSongs: StateFlow<List<StreamItem>> = libraryRepository.getLikedSongs()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
     val playlists: StateFlow<List<PlaylistUi>> = libraryRepository.getPlaylists()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
@@ -34,6 +37,10 @@ class LibraryViewModel @Inject constructor(
 
     fun removeSongFromPlaylist(playlistId: Long, songUrl: String) {
         viewModelScope.launch { libraryRepository.removeSongFromPlaylist(playlistId, songUrl) }
+    }
+
+    fun renamePlaylist(playlistId: Long, name: String) {
+        viewModelScope.launch { libraryRepository.renamePlaylist(playlistId, name) }
     }
 
     fun deletePlaylist(playlistId: Long) {

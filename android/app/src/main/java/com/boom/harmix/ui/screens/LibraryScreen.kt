@@ -57,10 +57,12 @@ import com.boom.harmix.ui.viewmodel.LibraryViewModel
 @Composable
 fun LibraryScreen(
     viewModel: LibraryViewModel = hiltViewModel(),
-    onPlayQueue: (List<StreamItem>, Int) -> Unit
+    onPlayQueue: (List<StreamItem>, Int) -> Unit,
+    onOpenPlaylist: (Long) -> Unit
 ) {
     val playlists by viewModel.playlists.collectAsStateWithLifecycle()
     val savedSongs by viewModel.savedSongs.collectAsStateWithLifecycle()
+    val likedSongs by viewModel.likedSongs.collectAsStateWithLifecycle()
     var showCreateDialog by remember { mutableStateOf(false) }
     var tab by remember { mutableStateOf("Playlists") }
 
@@ -86,7 +88,7 @@ fun LibraryScreen(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 6.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            listOf("Playlists", "Songs").forEach { label ->
+            listOf("Playlists", "Liked", "Songs").forEach { label ->
                 HarmixChip(text = label, selected = tab == label) { tab = label }
             }
         }
@@ -105,25 +107,27 @@ fun LibraryScreen(
                     verticalArrangement = Arrangement.spacedBy(14.dp)
                 ) {
                     items(playlists) { playlist ->
-                        PlaylistCard(playlist) {
-                            if (playlist.songs.isNotEmpty()) onPlayQueue(playlist.songs, 0)
-                        }
+                        PlaylistCard(playlist) { onOpenPlaylist(playlist.id) }
                     }
                 }
             }
         } else {
-            if (savedSongs.isEmpty()) {
-                EmptyState(title = "No saved songs", detail = "Save songs from the player to see them here.")
+            val songs = if (tab == "Liked") likedSongs else savedSongs
+            if (songs.isEmpty()) {
+                EmptyState(
+                    title = if (tab == "Liked") "Nothing liked yet" else "No saved songs",
+                    detail = "Tap the heart in the player to add songs here."
+                )
             } else {
                 LazyColumn(
                     contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 6.dp)
                 ) {
-                    items(savedSongs) { song ->
+                    items(songs) { song ->
                         TrackRow(
                             title = song.title,
                             subtitle = song.uploader,
                             artworkUrl = song.thumbnailUrl,
-                            onClick = { onPlayQueue(savedSongs, savedSongs.indexOf(song)) }
+                            onClick = { onPlayQueue(songs, songs.indexOf(song)) }
                         )
                     }
                 }
