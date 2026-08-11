@@ -376,11 +376,14 @@ fun FullScreenPlayerScreen(
 }
 
 @Composable
+@Suppress("UNUSED_PARAMETER")
 private fun LyricsPanel(lyricsResult: LyricsResult?, currentPositionMs: Long) {
-    val text = lyricsResult?.plainLyrics
-        ?: lyricsResult?.syncedLyrics?.lines()?.joinToString("\n") { line ->
-            line.substringAfter("]", line).trim()
-        }
+    val text = when (lyricsResult) {
+        is LyricsResult.PlainOnly -> lyricsResult.text
+        is LyricsResult.Synced -> lyricsResult.lines.joinToString("\n") { it.text }
+        LyricsResult.NotFound -> "No lyrics found for this song."
+        null -> null
+    }
 
     Box(
         modifier = Modifier
