@@ -47,7 +47,7 @@ class LibraryRepository @Inject constructor(
             savedSongDao.insertSong(item.toEntity(liked = true))
             true
         } else {
-            val liked = savedSongDao.getLikedUrlsOnce(item.url)
+            val liked = savedSongDao.isLiked(item.url)
             savedSongDao.setLiked(item.url, !liked)
             !liked
         }

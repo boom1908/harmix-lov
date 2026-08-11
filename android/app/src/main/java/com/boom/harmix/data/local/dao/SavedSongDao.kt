@@ -31,6 +31,9 @@ interface SavedSongDao {
     @Query("UPDATE saved_songs SET liked = :liked WHERE url = :url")
     suspend fun setLiked(url: String, liked: Boolean)
 
+    @Query("SELECT COALESCE((SELECT liked FROM saved_songs WHERE url = :url), 0)")
+    suspend fun isLiked(url: String): Boolean
+
     @Query("SELECT EXISTS(SELECT 1 FROM saved_songs WHERE url = :url)")
     suspend fun isSongSaved(url: String): Boolean
 
