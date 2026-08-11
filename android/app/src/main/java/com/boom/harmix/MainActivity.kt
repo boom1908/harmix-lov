@@ -75,12 +75,23 @@ class MainActivity : ComponentActivity() {
     private var lyricsResult by mutableStateOf<LyricsResult?>(null)
     private var isExtendingQueue = false
 
+    private var isLiked by mutableStateOf(false)
+    private var likedUrls by mutableStateOf<Set<String>>(emptySet())
+    private var isShuffleOn by mutableStateOf(false)
+    private var repeatMode by mutableStateOf(Player.REPEAT_MODE_OFF)
+
     private var isBuffering by mutableStateOf(false)
     private var pendingBufferingJob: Job? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         observePlaylists()
+        lifecycleScope.launch {
+            libraryRepository.getLikedUrls().collect { urls ->
+                likedUrls = urls
+                isLiked = currentTrackUrl?.let { urls.contains(it) } == true
+            }
+        }
         lifecycleScope.launch {
             googleAccounts.mainAccount.collect { isGuest = it == null }
         }
@@ -122,6 +133,12 @@ class MainActivity : ComponentActivity() {
                         queueItems = queueItems,
                         playlists = playlists,
                         isGuest = isGuest,
+                        isLiked = isLiked,
+                        isShuffleOn = isShuffleOn,
+                        repeatMode = repeatMode,
+                        onToggleLike = ::toggleLikeForCurrentTrack,
+                        onToggleShuffle = ::toggleShuffle,
+                        onCycleRepeat = ::cycleRepeat,
                         onSignIn = { },
                         onSignOut = { },
                         onPlayPauseClick = ::togglePlayPause,
@@ -168,6 +185,7 @@ class MainActivity : ComponentActivity() {
                 currentArtist = mediaItem?.mediaMetadata?.artist?.toString() ?: ""
                 currentArtworkUrl = mediaItem?.mediaMetadata?.artworkUri?.toString()
                 currentTrackUrl = mediaItem?.mediaId
+                isLiked = mediaItem?.mediaId?.let { likedUrls.contains(it) } == true
                 prefetchedDurationMs = mediaItem?.mediaMetadata?.extras?.getLong("harmix_duration_ms") ?: 0L
                 rawPlayerDurationMs = 0L
                 lyricsResult = null
@@ -244,6 +262,27 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private fun toggleLikeForCurrentTrack() {
+        val item = currentStreamItemOrNull() ?: return
+        lifecycleScope.launch { isLiked = libraryRepository.toggleLike(item) }
+    }
+
+    private fun toggleShuffle() {
+        val controller = mediaController ?: return
+        isShuffleOn = !controller.shuffleModeEnabled
+        controller.shuffleModeEnabled = isShuffleOn
+    }
+
+    private fun cycleRepeat() {
+        val controller = mediaController ?: return
+        repeatMode = when (controller.repeatMode) {
+            Player.REPEAT_MODE_OFF -> Player.REPEAT_MODE_ALL
+            Player.REPEAT_MODE_ALL -> Player.REPEAT_MODE_ONE
+            else -> Player.REPEAT_MODE_OFF
+        }
+        controller.repeatMode = repeatMode
+    }
+
     private fun extractVideoId(url: String): String? = runCatching { Uri.parse(url).getQueryParameter("v") }.getOrNull()
     private fun currentStreamItemOrNull(): StreamItem? = currentTrackUrl?.let { StreamItem(title = currentSongTitle, url = it, thumbnailUrl = currentArtworkUrl, uploader = currentArtist) }
     private fun fetchLyricsForCurrentTrack() {
@@ -281,6 +320,7 @@ class MainActivity : ComponentActivity() {
         currentArtist = startItem.uploader
         currentArtworkUrl = startItem.thumbnailUrl
         currentTrackUrl = startItem.url
+        isLiked = likedUrls.contains(startItem.url)
         prefetchedDurationMs = (startItem.durationSeconds ?: 0) * 1000L
         rawPlayerDurationMs = 0L
     }
