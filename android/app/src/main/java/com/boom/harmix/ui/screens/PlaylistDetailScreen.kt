@@ -56,13 +56,14 @@ import com.boom.harmix.ui.theme.GlassBorder
 import com.boom.harmix.ui.theme.MidnightBlack
 import com.boom.harmix.ui.theme.Sand
 import com.boom.harmix.ui.theme.SunsetGold
+import com.boom.harmix.ui.viewmodel.PlaylistDetailViewModel
 
 @Composable
 fun PlaylistDetailScreen(
     onBack: () -> Unit,
     onPlayQueue: (List<StreamItem>, Int) -> Unit,
     onAddToQueue: (StreamItem) -> Unit,
-    viewModel: PlaylistDetailViewModelAlias = hiltViewModel()
+    viewModel: PlaylistDetailViewModel = hiltViewModel()
 ) {
     val playlist by viewModel.playlist.collectAsStateWithLifecycle()
     var showRename by remember { mutableStateOf(false) }

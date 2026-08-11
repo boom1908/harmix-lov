@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.PlaylistAdd
 import androidx.compose.material.icons.filled.PlaylistPlay
 import androidx.compose.material.icons.filled.QueueMusic
@@ -25,10 +26,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.boom.harmix.extractor.StreamItem
-import com.boom.harmix.ui.theme.CoolGray
-import com.boom.harmix.ui.theme.DeepMidnight
-import com.boom.harmix.ui.theme.MistWhite
-import com.boom.harmix.ui.theme.ZenCyan
+import com.boom.harmix.ui.theme.Bone
+import com.boom.harmix.ui.theme.EmberRed
+import com.boom.harmix.ui.theme.MidnightBlack
+import com.boom.harmix.ui.theme.Sand
+import com.boom.harmix.ui.theme.SunsetGold
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -44,12 +46,12 @@ fun SongOptionsBottomSheet(
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
-        containerColor = DeepMidnight
+        containerColor = MidnightBlack
     ) {
         Column(modifier = Modifier.padding(bottom = 24.dp)) {
             Text(
                 text = item.title,
-                color = MistWhite,
+                color = Bone,
                 style = MaterialTheme.typography.titleMedium,
                 maxLines = 1,
                 modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp)
@@ -99,10 +101,10 @@ private fun OptionRow(
             .padding(horizontal = 20.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Icon(imageVector = icon, contentDescription = label, tint = ZenCyan)
+        Icon(imageVector = icon, contentDescription = label, tint = SunsetGold)
         Text(
             text = label,
-            color = MistWhite,
+            color = Bone,
             style = MaterialTheme.typography.bodyLarge,
             modifier = Modifier.padding(start = 16.dp)
         )
@@ -113,4 +115,46 @@ private fun copyLinkToClipboard(context: Context, url: String) {
     val clipboardManager = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
     clipboardManager.setPrimaryClip(ClipData.newPlainText("Harmix song link", url))
     Toast.makeText(context, "Link copied", Toast.LENGTH_SHORT).show()
+}
+
+/** Options for a song that already lives inside a playlist. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun PlaylistSongOptionsSheet(
+    song: StreamItem,
+    onDismiss: () -> Unit,
+    onAddToQueue: () -> Unit,
+    onRemove: () -> Unit
+) {
+    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = MidnightBlack) {
+        Column(modifier = Modifier.padding(bottom = 24.dp)) {
+            Text(
+                text = song.title,
+                color = Bone,
+                style = MaterialTheme.typography.titleMedium,
+                maxLines = 1,
+                modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp)
+            )
+            OptionRow(
+                icon = Icons.Filled.QueueMusic,
+                label = "Add to queue",
+                onClick = onAddToQueue
+            )
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(onClick = onRemove)
+                    .padding(horizontal = 20.dp, vertical = 14.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(imageVector = Icons.Filled.Delete, contentDescription = "Remove", tint = EmberRed)
+                Text(
+                    text = "Remove from playlist",
+                    color = EmberRed,
+                    style = MaterialTheme.typography.bodyLarge,
+                    modifier = Modifier.padding(start = 16.dp)
+                )
+            }
+        }
+    }
 }
