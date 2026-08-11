@@ -1,12 +1,19 @@
 package com.boom.harmix.playback
 
 import android.content.Intent
-import android.os.Handler
-import android.os.Looper
-import android.widget.Toast
+import android.net.Uri
+import android.util.Log
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.MediaItem
+import androidx.media3.common.PlaybackException
+import androidx.media3.common.Player
+import androidx.media3.datasource.DataSpec
+import androidx.media3.datasource.DefaultDataSource
+import androidx.media3.datasource.DefaultHttpDataSource
+import androidx.media3.datasource.ResolvingDataSource
+import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.session.LibraryResult
 import androidx.media3.session.MediaLibraryService
 import androidx.media3.session.MediaSession
@@ -20,8 +27,16 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.guava.future
+import kotlinx.coroutines.launch
+import java.io.IOException
 import javax.inject.Inject
 
+/**
+ * Playback is resolved lazily. Media items keep a `harmix://` placeholder URI and the
+ * real audio stream is extracted by [ResolvingDataSource] the moment ExoPlayer starts
+ * loading that item — so queueing a 200 song playlist is instant instead of running
+ * yt-dlp 200 times up front. The next track is pre-resolved in the background.
+ */
 @AndroidEntryPoint
 class HarmixPlaybackService : MediaLibraryService() {
 
@@ -32,32 +47,85 @@ class HarmixPlaybackService : MediaLibraryService() {
     private var librarySession: MediaLibrarySession? = null
 
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
-    private val mainHandler = Handler(Looper.getMainLooper())
 
     override fun onCreate() {
         super.onCreate()
 
-        player = ExoPlayer.Builder(this)
-            // Setting this tells ExoPlayer to request and manage audio focus itself.
-            // It will automatically pause on incoming calls, duck for notifications,
-            // and resume when focus is regained!
-            .setAudioAttributes(AudioAttributes.DEFAULT, /* handleAudioFocus = */ true)
-            .setHandleAudioBecomingNoisy(true) // pause when headphones unplugged
+        val httpFactory = DefaultHttpDataSource.Factory()
+            .setAllowCrossProtocolRedirects(true)
+            .setConnectTimeoutMs(15_000)
+            .setReadTimeoutMs(15_000)
+            .setUserAgent(USER_AGENT)
+
+        val resolvingFactory = ResolvingDataSource.Factory(
+            DefaultDataSource.Factory(this, httpFactory),
+            ResolvingDataSource.Resolver { dataSpec -> resolve(dataSpec) }
+        )
+
+        // Start playing as soon as a couple of seconds are buffered instead of
+        // waiting for the default 2.5s/5s thresholds on a cold network.
+        val loadControl = DefaultLoadControl.Builder()
+            .setBufferDurationsMs(
+                /* minBufferMs = */ 15_000,
+                /* maxBufferMs = */ 60_000,
+                /* bufferForPlaybackMs = */ 750,
+                /* bufferForPlaybackAfterRebufferMs = */ 1_500
+            )
+            .setPrioritizeTimeOverSizeThresholds(true)
             .build()
+
+        player = ExoPlayer.Builder(this)
+            .setMediaSourceFactory(DefaultMediaSourceFactory(resolvingFactory))
+            .setLoadControl(loadControl)
+            .setAudioAttributes(AudioAttributes.DEFAULT, /* handleAudioFocus = */ true)
+            .setHandleAudioBecomingNoisy(true)
+            .build()
+
+        player.addListener(object : Player.Listener {
+            override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+                prefetchUpcoming()
+            }
+
+            override fun onPlayerError(error: PlaybackException) {
+                Log.e(TAG, "Playback error", error)
+                // A single unplayable track shouldn't kill the whole queue.
+                if (player.hasNextMediaItem()) {
+                    player.seekToNextMediaItem()
+                    player.prepare()
+                }
+            }
+        })
 
         librarySession = MediaLibrarySession.Builder(this, player, HarmixLibrarySessionCallback())
             .build()
     }
 
-    override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaLibrarySession? {
-        return librarySession
+    private fun resolve(dataSpec: DataSpec): DataSpec {
+        val uri = dataSpec.uri
+        if (uri.scheme != HARMIX_SCHEME) return dataSpec
+        val source = Uri.decode(uri.schemeSpecificPart.removePrefix("//"))
+        return try {
+            val result = ytDlpRepository.getAudioStreamUrlBlocking(source)
+            dataSpec.withUri(Uri.parse(result.url))
+        } catch (e: Exception) {
+            throw IOException(e.message ?: "Could not resolve audio stream", e)
+        }
     }
+
+    private fun prefetchUpcoming() {
+        val nextIndex = player.nextMediaItemIndex
+        if (nextIndex == androidx.media3.common.C.INDEX_UNSET) return
+        val nextId = runCatching { player.getMediaItemAt(nextIndex).mediaId }.getOrNull() ?: return
+        if (nextId.isBlank()) return
+        serviceScope.launch { ytDlpRepository.prefetch(nextId) }
+    }
+
+    override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaLibrarySession? =
+        librarySession
 
     override fun onTaskRemoved(rootIntent: Intent?) {
         val session = librarySession ?: return
-        if (!session.player.isPlaying) {
-            stopSelf()
-        }
+        if (!session.player.isPlaying) stopSelf()
     }
 
     override fun onDestroy() {
@@ -70,12 +138,6 @@ class HarmixPlaybackService : MediaLibraryService() {
         super.onDestroy()
     }
 
-    private fun showErrorToast(message: String) {
-        mainHandler.post {
-            Toast.makeText(this@HarmixPlaybackService, "Extraction Error: $message", Toast.LENGTH_LONG).show()
-        }
-    }
-
     private inner class HarmixLibrarySessionCallback : MediaLibrarySession.Callback {
 
         override fun onAddMediaItems(
@@ -84,39 +146,8 @@ class HarmixPlaybackService : MediaLibraryService() {
             mediaItems: MutableList<MediaItem>
         ): ListenableFuture<MutableList<MediaItem>> =
             serviceScope.future {
-                mediaItems.map { item -> resolvePlayableItem(item) }.toMutableList()
+                mediaItems.map { item -> item.withPlaceholderUri() }.toMutableList()
             }
-
-        private suspend fun resolvePlayableItem(item: MediaItem): MediaItem {
-        val sourceIdentifier = item.requestMetadata.mediaUri?.toString() ?: item.mediaId
-        
-        // VISUAL DIAGNOSTIC 1: Tell the user the background service is working
-        android.os.Handler(android.os.Looper.getMainLooper()).post {
-            android.widget.Toast.makeText(applicationContext, "Fetching Audio...", android.widget.Toast.LENGTH_SHORT).show()
-        }
-
-        return try {
-            val result = ytDlpRepository.getAudioStreamUrl(sourceIdentifier)
-            val updatedMetadata = if (result.durationSeconds != null) {
-                val extras = (item.mediaMetadata.extras ?: android.os.Bundle()).apply {
-                    putLong("harmix_duration_ms", result.durationSeconds.toLong() * 1000L)
-                }
-                item.mediaMetadata.buildUpon().setExtras(extras).build()
-            } else {
-                item.mediaMetadata
-            }
-            item.buildUpon()
-                .setUri(result.url)
-                .setMediaMetadata(updatedMetadata)
-                .build()
-        } catch (e: Exception) {
-            // VISUAL DIAGNOSTIC 2: Scream the exact error directly to the screen!
-            android.os.Handler(android.os.Looper.getMainLooper()).post {
-                android.widget.Toast.makeText(applicationContext, "Extractor Error: ${e.message}", android.widget.Toast.LENGTH_LONG).show()
-            }
-            item
-        }
-    }
 
         override fun onGetLibraryRoot(
             session: MediaLibrarySession,
@@ -133,9 +164,7 @@ class HarmixPlaybackService : MediaLibraryService() {
                         .build()
                 )
                 .build()
-            return Futures.immediateFuture(
-                LibraryResult.ofItem(rootItem, params)
-            )
+            return Futures.immediateFuture(LibraryResult.ofItem(rootItem, params))
         }
 
         override fun onGetChildren(
@@ -145,13 +174,21 @@ class HarmixPlaybackService : MediaLibraryService() {
             page: Int,
             pageSize: Int,
             params: LibraryParams?
-        ): ListenableFuture<LibraryResult<ImmutableList<MediaItem>>> {
-            return Futures.immediateFuture(
-                LibraryResult.ofItemList(
-                    ImmutableList.of(),
-                    params
-                )
-            )
+        ): ListenableFuture<LibraryResult<ImmutableList<MediaItem>>> =
+            Futures.immediateFuture(LibraryResult.ofItemList(ImmutableList.of(), params))
+    }
+
+    private companion object {
+        const val TAG = "HarmixPlayback"
+        const val HARMIX_SCHEME = "harmix"
+        const val USER_AGENT =
+            "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Mobile Safari/537.36"
+
+        fun MediaItem.withPlaceholderUri(): MediaItem {
+            val source = requestMetadata.mediaUri?.toString() ?: mediaId
+            return buildUpon()
+                .setUri(Uri.parse("$HARMIX_SCHEME://${Uri.encode(source)}"))
+                .build()
         }
     }
 }
