@@ -8,6 +8,7 @@ import androidx.room.Transaction
 import com.boom.harmix.data.local.entity.PlaylistEntity
 import com.boom.harmix.data.local.entity.PlaylistSongCrossRef
 import com.boom.harmix.data.local.entity.PlaylistWithSongs
+import com.boom.harmix.data.local.entity.SavedSongEntity
 import kotlinx.coroutines.flow.Flow
 
 @Dao
@@ -22,12 +23,28 @@ interface PlaylistDao {
     @Query("SELECT * FROM playlists ORDER BY createdAtMillis DESC")
     fun getPlaylistsWithSongs(): Flow<List<PlaylistWithSongs>>
 
-    @Transaction
     @Query("SELECT * FROM playlists WHERE playlistId = :playlistId")
-    fun getPlaylistWithSongs(playlistId: Long): Flow<PlaylistWithSongs?>
+    fun getPlaylist(playlistId: Long): Flow<PlaylistEntity?>
+
+    /** Songs in the order the user (or the sync) added them. */
+    @Query(
+        """
+        SELECT s.* FROM saved_songs s
+        INNER JOIN playlist_song_cross_ref r ON s.url = r.songUrl
+        WHERE r.playlistId = :playlistId
+        ORDER BY r.position ASC
+        """
+    )
+    fun getPlaylistSongs(playlistId: Long): Flow<List<SavedSongEntity>>
+
+    @Query("UPDATE playlists SET name = :name WHERE playlistId = :playlistId")
+    suspend fun renamePlaylist(playlistId: Long, name: String)
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun addSongToPlaylist(crossRef: PlaylistSongCrossRef)
+
+    @Query("SELECT EXISTS(SELECT 1 FROM playlist_song_cross_ref WHERE playlistId = :playlistId AND songUrl = :songUrl)")
+    suspend fun isSongInPlaylist(playlistId: Long, songUrl: String): Boolean
 
     @Query("DELETE FROM playlist_song_cross_ref WHERE playlistId = :playlistId AND songUrl = :songUrl")
     suspend fun removeSongFromPlaylist(playlistId: Long, songUrl: String)

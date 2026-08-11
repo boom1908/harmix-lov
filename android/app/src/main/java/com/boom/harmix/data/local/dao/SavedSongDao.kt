@@ -10,6 +10,9 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface SavedSongDao {
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertSongIfAbsent(song: SavedSongEntity): Long
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertSong(song: SavedSongEntity)
 
@@ -18,6 +21,15 @@ interface SavedSongDao {
 
     @Query("SELECT * FROM saved_songs ORDER BY savedAtMillis DESC")
     fun getAllSongs(): Flow<List<SavedSongEntity>>
+
+    @Query("SELECT * FROM saved_songs WHERE liked = 1 ORDER BY savedAtMillis DESC")
+    fun getLikedSongs(): Flow<List<SavedSongEntity>>
+
+    @Query("SELECT url FROM saved_songs WHERE liked = 1")
+    fun getLikedUrls(): Flow<List<String>>
+
+    @Query("UPDATE saved_songs SET liked = :liked WHERE url = :url")
+    suspend fun setLiked(url: String, liked: Boolean)
 
     @Query("SELECT EXISTS(SELECT 1 FROM saved_songs WHERE url = :url)")
     suspend fun isSongSaved(url: String): Boolean
