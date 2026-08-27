@@ -67,7 +67,8 @@ class YtMusicSyncRepository @Inject constructor(
                 val name = playlist.optJSONObject("snippet")?.optString("title").orEmpty()
                     .ifBlank { "YouTube playlist" }
 
-                val localId = libraryRepository.createPlaylist("$name (YouTube)")
+                // Merge instead of recreate: same remote playlist always maps to the same local row.
+                val localId = libraryRepository.getOrCreateRemotePlaylist(playlistId, "$name (YouTube)")
                 playlistCount++
                 songCount += importPlaylistItems(playlistId, localId, token)
             }
@@ -104,7 +105,7 @@ class YtMusicSyncRepository @Inject constructor(
                     ?.let { it.optJSONObject("high") ?: it.optJSONObject("default") }
                     ?.optString("url")
 
-                libraryRepository.addSongToPlaylist(
+                val wasAdded = libraryRepository.addSongToPlaylistIfAbsent(
                     localPlaylistId,
                     StreamItem(
                         title = title,
@@ -113,7 +114,7 @@ class YtMusicSyncRepository @Inject constructor(
                         uploader = snippet.optString("videoOwnerChannelTitle", "")
                     )
                 )
-                added++
+                if (wasAdded) added++
             }
             pageToken = json.optString("nextPageToken").ifBlank { null }
         } while (pageToken != null)
