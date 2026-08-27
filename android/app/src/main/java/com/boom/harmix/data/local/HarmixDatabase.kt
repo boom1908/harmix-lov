@@ -14,7 +14,7 @@ import com.boom.harmix.data.local.entity.SavedSongEntity
         PlaylistEntity::class,
         PlaylistSongCrossRef::class
     ],
-    version = 2,
+    version = 3,
     exportSchema = false
 )
 abstract class HarmixDatabase : RoomDatabase() {

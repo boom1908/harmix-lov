@@ -80,6 +80,30 @@ class LibraryRepository @Inject constructor(
     suspend fun createPlaylist(name: String): Long =
         playlistDao.insertPlaylist(PlaylistEntity(name = name))
 
+    /**
+     * Merge target for a synced YouTube playlist: reuses the local playlist that was
+     * created from the same remote id (or adopts a same-named local one) so re-syncing
+     * never duplicates playlists.
+     */
+    suspend fun getOrCreateRemotePlaylist(remoteId: String, name: String): Long {
+        playlistDao.findPlaylistByRemoteId(remoteId)?.let { existing ->
+            if (existing.name != name) playlistDao.renamePlaylist(existing.playlistId, name)
+            return existing.playlistId
+        }
+        playlistDao.findLocalPlaylistByName(name)?.let { adopted ->
+            playlistDao.setRemoteId(adopted.playlistId, remoteId)
+            return adopted.playlistId
+        }
+        return playlistDao.insertPlaylist(PlaylistEntity(name = name, remoteId = remoteId))
+    }
+
+    /** True when the song was newly added (false when it was already in the playlist). */
+    suspend fun addSongToPlaylistIfAbsent(playlistId: Long, item: StreamItem): Boolean {
+        if (playlistDao.isSongInPlaylist(playlistId, item.url)) return false
+        addSongToPlaylist(playlistId, item)
+        return true
+    }
+
     suspend fun renamePlaylist(playlistId: Long, name: String) {
         if (name.isNotBlank()) playlistDao.renamePlaylist(playlistId, name)
     }

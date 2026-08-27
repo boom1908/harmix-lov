@@ -7,5 +7,7 @@ import androidx.room.PrimaryKey
 data class PlaylistEntity(
     @PrimaryKey(autoGenerate = true) val playlistId: Long = 0,
     val name: String,
-    val createdAtMillis: Long = System.currentTimeMillis()
+    val createdAtMillis: Long = System.currentTimeMillis(),
+    /** YouTube playlist id when this playlist came from a sync; null for local playlists. */
+    val remoteId: String? = null
 )

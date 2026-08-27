@@ -50,21 +50,83 @@ def get_up_next(video_id: str, limit: int = 10) -> str:
             break
     return json.dumps(up_next)
 
+def _entry_to_item(entry):
+    video_id = entry.get("videoId")
+    if not video_id:
+        return None
+    return {
+        "videoId": video_id,
+        "title": entry.get("title", "Unknown title"),
+        "artist": _artist_name(entry.get("artists")) or (entry.get("author") or ""),
+        "thumbnailUrl": _thumbnail_url(entry.get("thumbnails") or []),
+        "durationSeconds": _duration_seconds(entry),
+    }
+
+def _score(item, query, position, source_bonus):
+    """Rank the way a person would expect from typing the same words on YouTube."""
+    q = query.lower().strip()
+    tokens = [t for t in re.split(r"\s+", q) if t]
+    haystack = (item["title"] + " " + (item["artist"] or "")).lower()
+
+    score = source_bonus
+    if q and q in haystack:
+        score += 60
+    if q and item["title"].lower().startswith(q):
+        score += 25
+    matched = sum(1 for t in tokens if t in haystack)
+    if tokens:
+        score += 45 * (matched / len(tokens))
+    # Prefer real tracks over hour-long mixes / 20-second clips.
+    duration = item.get("durationSeconds") or 0
+    if 60 <= duration <= 900:
+        score += 12
+    elif duration > 2400:
+        score -= 20
+    # Keep each provider's own ordering as a tiebreaker.
+    score -= position * 0.6
+    return score
+
 def search_songs(query: str, limit: int = 20) -> str:
-    results = _ytmusic.search(query, filter="songs", limit=limit)
-    items = []
-    for entry in results:
-        video_id = entry.get("videoId")
-        if not video_id:
+    """
+    Search songs, videos and the "top result" shelf together, then merge and
+    re-rank so the list matches what the same keywords return on YouTube.
+    """
+    buckets = []
+    for filter_name, bonus in (("songs", 22), ("videos", 8), (None, 14)):
+        try:
+            if filter_name:
+                results = _ytmusic.search(query, filter=filter_name, limit=limit)
+            else:
+                results = _ytmusic.search(query, limit=limit)
+        except Exception:
             continue
-        items.append({
-            "videoId": video_id,
-            "title": entry.get("title", "Unknown title"),
-            "artist": _artist_name(entry.get("artists")),
-            "thumbnailUrl": _thumbnail_url(entry.get("thumbnails") or []),
-            "durationSeconds": _duration_seconds(entry),
-        })
-    return json.dumps(items)
+        buckets.append((results or [], bonus))
+
+    merged = {}
+    for results, bonus in buckets:
+        for position, entry in enumerate(results):
+            if entry.get("resultType") in ("artist", "album", "playlist"):
+                continue
+            item = _entry_to_item(entry)
+            if not item:
+                continue
+            score = _score(item, query, position, bonus)
+            existing = merged.get(item["videoId"])
+            if existing is None:
+                item["_score"] = score
+                merged[item["videoId"]] = item
+            else:
+                # Appearing in several shelves is itself a relevance signal.
+                existing["_score"] = max(existing["_score"], score) + 10
+                if not existing.get("durationSeconds"):
+                    existing["durationSeconds"] = item.get("durationSeconds")
+                if not existing.get("artist"):
+                    existing["artist"] = item.get("artist")
+
+    ranked = sorted(merged.values(), key=lambda i: i["_score"], reverse=True)[:limit]
+    for item in ranked:
+        item.pop("_score", None)
+    return json.dumps(ranked)
 
 def get_trending(limit: int = 15) -> str:
     items = []

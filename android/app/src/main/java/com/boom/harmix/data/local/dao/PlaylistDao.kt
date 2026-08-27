@@ -37,6 +37,15 @@ interface PlaylistDao {
     )
     fun getPlaylistSongs(playlistId: Long): Flow<List<SavedSongEntity>>
 
+    @Query("SELECT * FROM playlists WHERE remoteId = :remoteId LIMIT 1")
+    suspend fun findPlaylistByRemoteId(remoteId: String): PlaylistEntity?
+
+    @Query("SELECT * FROM playlists WHERE remoteId IS NULL AND name = :name LIMIT 1")
+    suspend fun findLocalPlaylistByName(name: String): PlaylistEntity?
+
+    @Query("UPDATE playlists SET remoteId = :remoteId WHERE playlistId = :playlistId")
+    suspend fun setRemoteId(playlistId: Long, remoteId: String)
+
     @Query("UPDATE playlists SET name = :name WHERE playlistId = :playlistId")
     suspend fun renamePlaylist(playlistId: Long, name: String)
 
