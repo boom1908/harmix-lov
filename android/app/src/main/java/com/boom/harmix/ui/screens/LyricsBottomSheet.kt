@@ -1,19 +1,30 @@
 package com.boom.harmix.ui.screens
 
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -32,17 +43,26 @@ fun LyricsBottomSheet(
     currentPositionMs: Long,
     onDismiss: () -> Unit
 ) {
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = false)
+
     ModalBottomSheet(
         onDismissRequest = onDismiss,
-        containerColor = DeepMidnight
+        sheetState = sheetState,
+        containerColor = DeepMidnight,
+        contentColor = MistWhite
     ) {
-        // Reading lyrics shouldn't be interrupted by the screen dimming off.
-        KeepScreenOn(enabled = lyricsResult is LyricsResult.Synced || lyricsResult is LyricsResult.PlainOnly)
+        // Keep the display awake for the entire time the lyrics sheet is open.
+        KeepScreenOn()
 
-        Box(modifier = Modifier.fillMaxWidth().height(500.dp).padding(horizontal = 20.dp)) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .fillMaxHeight(0.70f)
+                .padding(horizontal = 20.dp)
+        ) {
             when (lyricsResult) {
                 null -> Text(text = "Loading lyrics...", color = CoolGray)
-                is LyricsResult.NotFound -> Text(text = "No lyrics found for this track.", color = CoolGray)
+                LyricsResult.NotFound -> Text(text = "No lyrics found for this track.", color = CoolGray)
                 is LyricsResult.PlainOnly -> {
                     LazyColumn {
                         item {
@@ -64,32 +84,115 @@ fun LyricsBottomSheet(
 @Composable
 private fun SyncedLyricsList(lines: List<LyricLine>, currentPositionMs: Long) {
     val listState = rememberLazyListState()
-
-    // Active line = the last line whose timestamp has already passed.
-    val activeIndex = lines.indexOfLast { it.timestampMs <= currentPositionMs }.coerceAtLeast(0)
+    val lyricLines = remember(lines) { lines.filter { it.text.isNotBlank() } }
+    val rows = remember(lyricLines) { buildLyricRows(lyricLines) }
+    val activeIndex = lyricLines.indexOfLast { it.timestampMs <= currentPositionMs }
 
     LaunchedEffect(activeIndex) {
-        // Center the active line roughly mid-sheet
-        listState.animateScrollToItem((activeIndex - 2).coerceAtLeast(0))
+        if (activeIndex >= 0) {
+            val rowIndex = rows.indexOfFirst { it is LyricRow.Line && it.index == activeIndex }
+            if (rowIndex >= 0) listState.animateScrollToItem((rowIndex - 2).coerceAtLeast(0))
+        }
+    }
+
+    if (rows.isEmpty()) {
+        Text("No synced lyrics found for this track.", color = CoolGray)
+        return
     }
 
     LazyColumn(
         state = listState,
         verticalArrangement = Arrangement.spacedBy(16.dp),
-        modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp)
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 16.dp)
     ) {
-        items(lines.size) { index ->
-            val line = lines[index]
-            val isActive = index == activeIndex
-
-            Text(
-                text = line.text,
-                color = if (isActive) ZenCyan else CoolGray,
-                fontWeight = if (isActive) FontWeight.Bold else FontWeight.Normal,
-                style = if (isActive) MaterialTheme.typography.titleMedium else MaterialTheme.typography.bodyLarge,
-                textAlign = TextAlign.Start,
-                modifier = Modifier.fillMaxWidth()
-            )
+        items(rows, key = { row ->
+            when (row) {
+                is LyricRow.Line -> "line-${row.index}"
+                is LyricRow.Gap -> "gap-${row.startMs}-${row.endMs}"
+            }
+        }) { row ->
+            when (row) {
+                is LyricRow.Line -> {
+                    val isActive = row.index == activeIndex
+                    Text(
+                        text = row.line.text,
+                        color = if (isActive) ZenCyan else CoolGray,
+                        fontWeight = if (isActive) FontWeight.Bold else FontWeight.Normal,
+                        style = if (isActive) MaterialTheme.typography.titleMedium else MaterialTheme.typography.bodyLarge,
+                        textAlign = TextAlign.Start,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+                is LyricRow.Gap -> InstrumentalGap(row, currentPositionMs)
+            }
         }
     }
 }
+
+private sealed interface LyricRow {
+    data class Line(val index: Int, val line: LyricLine) : LyricRow
+    data class Gap(val startMs: Long, val endMs: Long) : LyricRow
+}
+
+private fun buildLyricRows(lines: List<LyricLine>): List<LyricRow> {
+    if (lines.isEmpty()) return emptyList()
+    val rows = mutableListOf<LyricRow>()
+    if (lines.first().timestampMs >= GAP_THRESHOLD_MS) {
+        rows += LyricRow.Gap(0L, lines.first().timestampMs)
+    }
+    lines.forEachIndexed { index, line ->
+        rows += LyricRow.Line(index, line)
+        val nextTimestamp = lines.getOrNull(index + 1)?.timestampMs ?: return@forEachIndexed
+        if (nextTimestamp - line.timestampMs >= GAP_THRESHOLD_MS) {
+            rows += LyricRow.Gap(line.timestampMs, nextTimestamp)
+        }
+    }
+    return rows
+}
+
+@Composable
+private fun InstrumentalGap(gap: LyricRow.Gap, currentPositionMs: Long) {
+    val progress = ((currentPositionMs - gap.startMs).toFloat() / (gap.endMs - gap.startMs))
+        .coerceIn(0f, 1f)
+    val animatedProgress by animateFloatAsState(progress, label = "instrumental-gap-progress")
+
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        Canvas(modifier = Modifier.size(42.dp)) {
+            val stroke = Stroke(width = 4.dp.toPx(), cap = StrokeCap.Round)
+            drawArc(
+                color = CoolGray.copy(alpha = 0.25f),
+                startAngle = -90f,
+                sweepAngle = 360f,
+                useCenter = false,
+                style = stroke
+            )
+            drawArc(
+                color = ZenCyan,
+                startAngle = -90f,
+                sweepAngle = 360f * animatedProgress,
+                useCenter = false,
+                style = stroke
+            )
+        }
+        val duration = formatGapTime(gap.endMs - gap.startMs)
+        val elapsed = formatGapTime((currentPositionMs - gap.startMs).coerceIn(0L, gap.endMs - gap.startMs))
+        Text(
+            text = "Instrumental · $elapsed / $duration",
+            color = CoolGray,
+            style = MaterialTheme.typography.bodySmall
+        )
+    }
+}
+
+private fun formatGapTime(millis: Long): String {
+    val totalSeconds = millis.coerceAtLeast(0L) / 1000L
+    return "%d:%02d".format(totalSeconds / 60L, totalSeconds % 60L)
+}
+
+private const val GAP_THRESHOLD_MS = 4_000L

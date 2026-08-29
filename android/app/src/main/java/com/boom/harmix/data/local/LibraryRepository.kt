@@ -86,11 +86,31 @@ class LibraryRepository @Inject constructor(
      * never duplicates playlists.
      */
     suspend fun getOrCreateRemotePlaylist(remoteId: String, name: String): Long {
-        playlistDao.findPlaylistByRemoteId(remoteId)?.let { existing ->
-            if (existing.name != name) playlistDao.renamePlaylist(existing.playlistId, name)
-            return existing.playlistId
+        val matches = playlistDao.findPlaylistsByRemoteId(remoteId)
+        if (matches.isNotEmpty()) {
+            // Older builds could already have duplicate remote rows. Keep the
+            // oldest row as the canonical playlist and merge its songs before
+            // removing the extras, so a later sync repairs the library too.
+            val canonical = matches.first()
+            matches.drop(1).forEach { duplicate ->
+                playlistDao.getPlaylistSongRefs(duplicate.playlistId).forEach { ref ->
+                    if (!playlistDao.isSongInPlaylist(canonical.playlistId, ref.songUrl)) {
+                        playlistDao.addSongToPlaylist(
+                            ref.copy(
+                                playlistId = canonical.playlistId,
+                                position = playlistDao.getNextPosition(canonical.playlistId)
+                            )
+                        )
+                    }
+                }
+                playlistDao.deletePlaylist(duplicate.playlistId)
+            }
+            if (canonical.name != name) playlistDao.renamePlaylist(canonical.playlistId, name)
+            return canonical.playlistId
         }
-        playlistDao.findLocalPlaylistByName(name)?.let { adopted ->
+        val legacyName = name.removeSuffix(" (YouTube)")
+        (playlistDao.findLocalPlaylistByName(name)
+            ?: playlistDao.findLocalPlaylistByName(legacyName))?.let { adopted ->
             playlistDao.setRemoteId(adopted.playlistId, remoteId)
             return adopted.playlistId
         }

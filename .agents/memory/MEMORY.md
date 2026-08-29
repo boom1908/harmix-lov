@@ -1,0 +1,1 @@
+- [Android build environment](android-build-environment.md) — Android Gradle verification needs both Java and a configured Android SDK path.

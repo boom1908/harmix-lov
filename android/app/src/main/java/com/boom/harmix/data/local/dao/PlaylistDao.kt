@@ -40,6 +40,9 @@ interface PlaylistDao {
     @Query("SELECT * FROM playlists WHERE remoteId = :remoteId LIMIT 1")
     suspend fun findPlaylistByRemoteId(remoteId: String): PlaylistEntity?
 
+    @Query("SELECT * FROM playlists WHERE remoteId = :remoteId ORDER BY playlistId ASC")
+    suspend fun findPlaylistsByRemoteId(remoteId: String): List<PlaylistEntity>
+
     @Query("SELECT * FROM playlists WHERE remoteId IS NULL AND name = :name LIMIT 1")
     suspend fun findLocalPlaylistByName(name: String): PlaylistEntity?
 
@@ -54,6 +57,9 @@ interface PlaylistDao {
 
     @Query("SELECT EXISTS(SELECT 1 FROM playlist_song_cross_ref WHERE playlistId = :playlistId AND songUrl = :songUrl)")
     suspend fun isSongInPlaylist(playlistId: Long, songUrl: String): Boolean
+
+    @Query("SELECT * FROM playlist_song_cross_ref WHERE playlistId = :playlistId ORDER BY position ASC")
+    suspend fun getPlaylistSongRefs(playlistId: Long): List<PlaylistSongCrossRef>
 
     @Query("DELETE FROM playlist_song_cross_ref WHERE playlistId = :playlistId AND songUrl = :songUrl")
     suspend fun removeSongFromPlaylist(playlistId: Long, songUrl: String)

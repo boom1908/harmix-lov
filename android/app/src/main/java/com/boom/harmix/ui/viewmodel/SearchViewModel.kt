@@ -2,6 +2,7 @@ package com.boom.harmix.ui.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.boom.harmix.data.local.SearchHistoryStore
 import com.boom.harmix.extractor.StreamItem
 import com.boom.harmix.metadata.MetadataRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -20,7 +21,8 @@ sealed class SearchUiState {
 
 @HiltViewModel
 class SearchViewModel @Inject constructor(
-    private val metadataRepository: MetadataRepository
+    private val metadataRepository: MetadataRepository,
+    private val searchHistoryStore: SearchHistoryStore
 ) : ViewModel() {
 
     private val _query = MutableStateFlow("")
@@ -28,6 +30,7 @@ class SearchViewModel @Inject constructor(
 
     private val _uiState = MutableStateFlow<SearchUiState>(SearchUiState.Idle)
     val uiState: StateFlow<SearchUiState> = _uiState.asStateFlow()
+    val history: StateFlow<List<String>> = searchHistoryStore.history
 
     fun onQueryChanged(newQuery: String) {
         _query.value = newQuery
@@ -36,6 +39,7 @@ class SearchViewModel @Inject constructor(
     fun runSearch() {
         val currentQuery = _query.value.trim()
         if (currentQuery.isEmpty()) return
+        searchHistoryStore.add(currentQuery)
 
         viewModelScope.launch {
             _uiState.value = SearchUiState.Loading
@@ -53,4 +57,13 @@ class SearchViewModel @Inject constructor(
             }
         }
     }
+
+    fun selectHistory(term: String) {
+        _query.value = term
+        runSearch()
+    }
+
+    fun removeHistory(term: String) = searchHistoryStore.remove(term)
+
+    fun clearHistory() = searchHistoryStore.clear()
 }

@@ -15,24 +15,29 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.PlaylistAdd
-import androidx.compose.material.icons.filled.QueueMusic
 import androidx.compose.material.icons.filled.Repeat
 import androidx.compose.material.icons.filled.RepeatOne
 import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -50,7 +55,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -95,19 +102,44 @@ fun FullScreenPlayerScreen(
     onQueueItemClick: (index: Int) -> Unit,
     onQueueItemRemove: (index: Int) -> Unit,
     onLyricsClick: () -> Unit,
+    playbackSpeed: Float,
+    onPlaybackSpeedChange: (Float) -> Unit,
+    onSetSleepTimer: (durationMs: Long?, endOfCurrentTrack: Boolean) -> Unit,
     onCollapse: () -> Unit
 ) {
     var isDragging by remember { mutableStateOf(false) }
     var dragPositionMs by remember { mutableFloatStateOf(0f) }
     var showQueueSheet by remember { mutableStateOf(false) }
     var showLyricsSheet by remember { mutableStateOf(false) }
-    var tab by remember { mutableStateOf("Up next") }
+    var showPlayerMenu by remember { mutableStateOf(false) }
+    var showSleepTimerSheet by remember { mutableStateOf(false) }
+    var showPlaybackSpeedSheet by remember { mutableStateOf(false) }
+    val scrollState = rememberScrollState()
+    val dismissThresholdPx = with(LocalDensity.current) { 120.dp.toPx() }
 
     Box(
         modifier = Modifier
             .fillMaxSize()
             .background(MidnightBlack)
             .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) {}
+            .pointerInput(onCollapse) {
+                var downwardDistance = 0f
+                detectVerticalDragGestures(
+                    onVerticalDrag = { change, dragAmount ->
+                        if (dragAmount > 0f && scrollState.value == 0) {
+                            downwardDistance += dragAmount
+                            change.consume()
+                        } else if (dragAmount < 0f) {
+                            downwardDistance = 0f
+                        }
+                    },
+                    onDragEnd = {
+                        if (downwardDistance >= dismissThresholdPx) onCollapse()
+                        downwardDistance = 0f
+                    },
+                    onDragCancel = { downwardDistance = 0f }
+                )
+            }
     ) {
         // Warm glow behind the artwork, like the web preview.
         Box(
@@ -124,15 +156,19 @@ fun FullScreenPlayerScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .verticalScroll(rememberScrollState())
+                .verticalScroll(scrollState)
                 .padding(horizontal = 22.dp)
         ) {
             Row(
-                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .statusBarsPadding(),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                IconButton(onClick = onCollapse) {
-                    Icon(Icons.Filled.KeyboardArrowDown, contentDescription = "Collapse player", tint = Bone)
+                Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
+                    IconButton(onClick = onCollapse) {
+                        Icon(Icons.Filled.KeyboardArrowDown, contentDescription = "Collapse player", tint = Bone)
+                    }
                 }
                 Text(
                     text = "NOW PLAYING",
@@ -140,16 +176,42 @@ fun FullScreenPlayerScreen(
                     fontSize = 11.sp,
                     letterSpacing = 3.sp,
                     fontWeight = FontWeight.Bold,
-                    modifier = Modifier.weight(1f),
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.weight(2f),
                     maxLines = 1
                 )
-                if (!isGuest) {
-                    IconButton(onClick = onAddCurrentTrackToPlaylistRequest) {
-                        Icon(Icons.Filled.PlaylistAdd, contentDescription = "Add to playlist", tint = Sand)
+                Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.CenterEnd) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        if (!isGuest) {
+                            IconButton(onClick = onAddCurrentTrackToPlaylistRequest) {
+                                Icon(Icons.Filled.PlaylistAdd, contentDescription = "Add to playlist", tint = Sand)
+                            }
+                        }
+                        Box {
+                            IconButton(onClick = { showPlayerMenu = true }) {
+                                Icon(Icons.Filled.MoreVert, contentDescription = "Player options", tint = Sand)
+                            }
+                            DropdownMenu(
+                                expanded = showPlayerMenu,
+                                onDismissRequest = { showPlayerMenu = false }
+                            ) {
+                                DropdownMenuItem(
+                                    text = { Text("Sleep Timer") },
+                                    onClick = {
+                                        showPlayerMenu = false
+                                        showSleepTimerSheet = true
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Playback Speed") },
+                                    onClick = {
+                                        showPlayerMenu = false
+                                        showPlaybackSpeedSheet = true
+                                    }
+                                )
+                            }
+                        }
                     }
-                }
-                IconButton(onClick = { showQueueSheet = true }) {
-                    Icon(Icons.Filled.QueueMusic, contentDescription = "Queue", tint = Sand)
                 }
             }
 
@@ -278,79 +340,40 @@ fun FullScreenPlayerScreen(
                 }
             }
 
-            // Up next / Lyrics tabs
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(top = 26.dp)
-                    .clip(CircleShape)
-                    .background(GlassFill)
-                    .border(1.dp, GlassBorder, CircleShape)
-                    .padding(4.dp),
-                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    .padding(horizontal = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                listOf("Up next", "Lyrics").forEach { label ->
-                    val selected = tab == label
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .clip(CircleShape)
-                            .then(if (selected) Modifier.background(SunsetBrush) else Modifier)
-                            .clickable {
-                                tab = label
-                                if (label == "Lyrics") onLyricsClick()
-                            }
-                            .padding(vertical = 9.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = label,
-                            color = if (selected) MidnightBlack else Sand,
-                            fontWeight = if (selected) FontWeight.Black else FontWeight.Medium,
-                            fontSize = 13.sp
-                        )
-                    }
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .clip(CircleShape)
+                        .background(GlassFill)
+                        .border(1.dp, GlassBorder, CircleShape)
+                        .clickable { showQueueSheet = true }
+                        .padding(vertical = 11.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text("Up next", color = Sand, fontWeight = FontWeight.Bold, fontSize = 13.sp)
                 }
-            }
-
-            Spacer(Modifier.height(12.dp))
-
-            if (tab == "Up next") {
-                if (queueItems.isEmpty()) {
-                    Text(
-                        text = "Queue is empty.",
-                        color = Sand,
-                        style = MaterialTheme.typography.bodySmall,
-                        modifier = Modifier.padding(vertical = 18.dp)
-                    )
-                } else {
-                    queueItems.forEach { queueItem ->
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(16.dp))
-                                .then(if (queueItem.isCurrent) Modifier.background(GlassFill) else Modifier)
-                                .clickable { onQueueItemClick(queueItem.index) }
-                                .padding(8.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Artwork(queueItem.thumbnailUrl, queueItem.title, modifier = Modifier.size(42.dp))
-                            Text(
-                                text = queueItem.title,
-                                color = if (queueItem.isCurrent) SunsetGold else Bone,
-                                style = MaterialTheme.typography.bodyMedium,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.weight(1f).padding(horizontal = 12.dp)
-                            )
-                            IconButton(onClick = { onQueueItemRemove(queueItem.index) }) {
-                                Icon(Icons.Filled.KeyboardArrowDown, contentDescription = "Remove from queue", tint = Sand)
-                            }
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .clip(CircleShape)
+                        .background(GlassFill)
+                        .border(1.dp, GlassBorder, CircleShape)
+                        .clickable {
+                            showLyricsSheet = true
+                            onLyricsClick()
                         }
-                    }
+                        .padding(vertical = 11.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text("Lyrics", color = Sand, fontWeight = FontWeight.Bold, fontSize = 13.sp)
                 }
-            } else {
-                LyricsPanel(lyricsResult = lyricsResult, currentPositionMs = currentPositionMs)
             }
 
             Spacer(Modifier.height(120.dp))
@@ -373,30 +396,25 @@ fun FullScreenPlayerScreen(
             onDismiss = { showLyricsSheet = false }
         )
     }
-}
 
-@Composable
-@Suppress("UNUSED_PARAMETER")
-private fun LyricsPanel(lyricsResult: LyricsResult?, currentPositionMs: Long) {
-    val text = when (lyricsResult) {
-        is LyricsResult.PlainOnly -> lyricsResult.text
-        is LyricsResult.Synced -> lyricsResult.lines.joinToString("\n") { it.text }
-        LyricsResult.NotFound -> "No lyrics found for this song."
-        null -> null
+    if (showSleepTimerSheet) {
+        SleepTimerBottomSheet(
+            onDismiss = { showSleepTimerSheet = false },
+            onApply = { durationMs, endOfCurrentTrack ->
+                onSetSleepTimer(durationMs, endOfCurrentTrack)
+                showSleepTimerSheet = false
+            }
+        )
     }
 
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(20.dp))
-            .background(GlassFill)
-            .border(1.dp, GlassBorder, RoundedCornerShape(20.dp))
-            .padding(18.dp)
-    ) {
-        Text(
-            text = text?.takeIf { it.isNotBlank() } ?: "Looking for lyrics…",
-            color = if (text.isNullOrBlank()) Sand else Bone,
-            style = MaterialTheme.typography.bodyMedium
+    if (showPlaybackSpeedSheet) {
+        PlaybackSpeedBottomSheet(
+            currentSpeed = playbackSpeed,
+            onDismiss = { showPlaybackSpeedSheet = false },
+            onApply = {
+                onPlaybackSpeedChange(it)
+                showPlaybackSpeedSheet = false
+            }
         )
     }
 }

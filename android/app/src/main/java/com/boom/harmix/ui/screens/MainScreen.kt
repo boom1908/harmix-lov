@@ -94,6 +94,9 @@ fun MainScreen(
     onQueueItemClick: (index: Int) -> Unit,
     onQueueItemRemove: (index: Int) -> Unit,
     onLyricsClick: () -> Unit,
+    playbackSpeed: Float,
+    onPlaybackSpeedChange: (Float) -> Unit,
+    onSetSleepTimer: (durationMs: Long?, endOfCurrentTrack: Boolean) -> Unit,
     playlistDialogTarget: StreamItem?,
     currentTrackForPlaylist: StreamItem?,
     onAddToPlaylistRequest: (StreamItem) -> Unit,
@@ -181,6 +184,9 @@ fun MainScreen(
                 onQueueItemClick = onQueueItemClick,
                 onQueueItemRemove = onQueueItemRemove,
                 onLyricsClick = onLyricsClick,
+                 playbackSpeed = playbackSpeed,
+                 onPlaybackSpeedChange = onPlaybackSpeedChange,
+                 onSetSleepTimer = onSetSleepTimer,
                 onCollapse = { isFullPlayerExpanded = false }
             )
         }

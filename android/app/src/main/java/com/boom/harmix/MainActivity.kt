@@ -27,6 +27,7 @@ import com.boom.harmix.extractor.StreamItem
 import com.boom.harmix.metadata.LyricsResult
 import com.boom.harmix.metadata.MetadataRepository
 import com.boom.harmix.playback.HarmixPlaybackService
+import com.boom.harmix.playback.LastPlayedStore
 import com.boom.harmix.playback.QueueItemUi
 import com.boom.harmix.ui.screens.MainScreen
 import com.boom.harmix.ui.theme.HarmixTheme
@@ -50,6 +51,9 @@ class MainActivity : ComponentActivity() {
 
     @Inject
     lateinit var googleAccounts: com.boom.harmix.auth.GoogleAccountsRepository
+
+    @Inject
+    lateinit var lastPlayedStore: LastPlayedStore
 
     private var controllerFuture: ListenableFuture<MediaController>? = null
     private var mediaController: MediaController? = null
@@ -82,9 +86,18 @@ class MainActivity : ComponentActivity() {
 
     private var isBuffering by mutableStateOf(false)
     private var pendingBufferingJob: Job? = null
+    private var playbackSpeed by mutableStateOf(1f)
+    private var sleepTimerJob: Job? = null
+    private var sleepAtEndOfTrackUrl: String? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        lastPlayedStore.read()?.let { lastPlayed ->
+            currentSongTitle = lastPlayed.title
+            currentArtist = lastPlayed.artist
+            currentArtworkUrl = lastPlayed.artworkUrl
+            currentTrackUrl = lastPlayed.url
+        }
         observePlaylists()
         lifecycleScope.launch {
             libraryRepository.getLikedUrls().collect { urls ->
@@ -154,7 +167,10 @@ class MainActivity : ComponentActivity() {
                         onCreatePlaylistForTarget = ::createPlaylistAndAddTarget,
                         currentTrackForPlaylist = currentStreamItemOrNull(),
                         lyricsResult = lyricsResult,
-                        onLyricsClick = ::fetchLyricsForCurrentTrack
+                         onLyricsClick = ::fetchLyricsForCurrentTrack,
+                         playbackSpeed = playbackSpeed,
+                         onPlaybackSpeedChange = ::setPlaybackSpeed,
+                         onSetSleepTimer = ::setSleepTimer
                     )
                 }
             }
@@ -169,7 +185,10 @@ class MainActivity : ComponentActivity() {
         val controller = mediaController ?: return
         controller.addListener(object : Player.Listener {
             override fun onPlayerError(error: PlaybackException) {
-                currentSongTitle = "Playback error — see logs"
+                // Keep the last known metadata visible while Media3 reconnects or skips
+                // an unplayable stream. Replacing it with an error makes a cold start
+                // look like the app lost the current track.
+                Log.e("Harmix", "Playback error", error)
                 clearBufferingImmediately()
             }
             override fun onIsPlayingChanged(playing: Boolean) {
@@ -190,6 +209,11 @@ class MainActivity : ComponentActivity() {
                 rawPlayerDurationMs = 0L
                 lyricsResult = null
                 isExtendingQueue = false
+                mediaItem?.let(::rememberLastPlayed)
+                if (sleepAtEndOfTrackUrl != null && sleepAtEndOfTrackUrl != mediaItem?.mediaId) {
+                    controller.pause()
+                    sleepAtEndOfTrackUrl = null
+                }
                 refreshQueueState()
                 maybeExtendQueue()
             }
@@ -207,6 +231,24 @@ class MainActivity : ComponentActivity() {
                 }
             }
         })
+        controller.setPlaybackSpeed(playbackSpeed)
+        syncControllerState(controller)
+    }
+
+    private fun syncControllerState(controller: MediaController) {
+        isPlaying = controller.isPlaying
+        currentPositionMs = controller.currentPosition.coerceAtLeast(0L)
+        controller.currentMediaItem?.let { mediaItem ->
+            currentSongTitle = mediaItem.mediaMetadata.title?.toString()
+                .orEmpty()
+                .ifBlank { currentSongTitle }
+            currentArtist = mediaItem.mediaMetadata.artist?.toString().orEmpty()
+            currentArtworkUrl = mediaItem.mediaMetadata.artworkUri?.toString()
+            currentTrackUrl = mediaItem.mediaId
+            prefetchedDurationMs = mediaItem.mediaMetadata.extras?.getLong("harmix_duration_ms") ?: 0L
+            rememberLastPlayed(mediaItem)
+        }
+        refreshQueueState()
     }
 
     private fun scheduleBufferingIndicator() {
@@ -226,7 +268,21 @@ class MainActivity : ComponentActivity() {
     private fun startPositionTicker() {
         lifecycleScope.launch {
             while (isActive) {
-                currentPositionMs = mediaController?.currentPosition?.coerceAtLeast(0L) ?: 0L
+                val controller = mediaController
+                currentPositionMs = controller?.currentPosition?.coerceAtLeast(0L) ?: 0L
+                val timerTrack = sleepAtEndOfTrackUrl
+                if (timerTrack != null && currentTrackUrl != timerTrack) {
+                    controller?.pause()
+                    sleepAtEndOfTrackUrl = null
+                } else if (
+                    timerTrack != null &&
+                    currentTrackUrl == timerTrack &&
+                    effectiveDurationMs > 0L &&
+                    currentPositionMs >= effectiveDurationMs - 750L
+                ) {
+                    controller?.pause()
+                    sleepAtEndOfTrackUrl = null
+                }
                 delay(500)
             }
         }
@@ -289,6 +345,39 @@ class MainActivity : ComponentActivity() {
         lyricsResult = null
         lifecycleScope.launch { lyricsResult = metadataRepository.getLyrics(currentSongTitle, currentArtist, (effectiveDurationMs / 1000L).toInt()) }
     }
+
+    private fun setPlaybackSpeed(speed: Float) {
+        playbackSpeed = speed.coerceIn(0.5f, 2f)
+        mediaController?.setPlaybackSpeed(playbackSpeed)
+    }
+
+    private fun setSleepTimer(durationMs: Long?, endOfCurrentTrack: Boolean) {
+        sleepTimerJob?.cancel()
+        sleepTimerJob = null
+        sleepAtEndOfTrackUrl = null
+
+        if (endOfCurrentTrack) {
+            sleepAtEndOfTrackUrl = currentTrackUrl
+        } else if (durationMs != null && durationMs > 0L) {
+            sleepTimerJob = lifecycleScope.launch {
+                delay(durationMs)
+                mediaController?.pause()
+                sleepTimerJob = null
+            }
+        }
+    }
+
+    private fun rememberLastPlayed(mediaItem: MediaItem) {
+        val url = mediaItem.mediaId.takeIf { it.isNotBlank() } ?: return
+        lastPlayedStore.save(
+            com.boom.harmix.playback.LastPlayedTrack(
+                title = mediaItem.mediaMetadata.title?.toString().orEmpty().ifBlank { "Unknown title" },
+                artist = mediaItem.mediaMetadata.artist?.toString().orEmpty(),
+                artworkUrl = mediaItem.mediaMetadata.artworkUri?.toString(),
+                url = url
+            )
+        )
+    }
     private fun addTargetToPlaylist(playlistId: Long) {
         val item = playlistDialogTarget ?: return
         lifecycleScope.launch {
@@ -323,6 +412,14 @@ class MainActivity : ComponentActivity() {
         isLiked = likedUrls.contains(startItem.url)
         prefetchedDurationMs = (startItem.durationSeconds ?: 0) * 1000L
         rawPlayerDurationMs = 0L
+        lastPlayedStore.save(
+            com.boom.harmix.playback.LastPlayedTrack(
+                title = startItem.title,
+                artist = startItem.uploader,
+                artworkUrl = startItem.thumbnailUrl,
+                url = startItem.url
+            )
+        )
     }
 
     private fun playNext(item: StreamItem) { mediaController?.let { isBuffering = true
@@ -330,7 +427,11 @@ class MainActivity : ComponentActivity() {
     private fun addToQueue(item: StreamItem) { mediaController?.let { it.addMediaItem(item.toMediaItem()); refreshQueueState() } }
     private fun removeQueueItem(index: Int) { mediaController?.let { it.removeMediaItem(index); refreshQueueState() } }
     private fun togglePlayPause() { mediaController?.let { if (it.isPlaying) it.pause() else it.play() } }
-    override fun onDestroy() { controllerFuture?.let { MediaController.releaseFuture(it) }; super.onDestroy() }
+    override fun onDestroy() {
+        sleepTimerJob?.cancel()
+        controllerFuture?.let { MediaController.releaseFuture(it) }
+        super.onDestroy()
+    }
 }
 
 private fun StreamItem.toMediaItem(): MediaItem {

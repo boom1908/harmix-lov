@@ -62,20 +62,33 @@ def _entry_to_item(entry):
         "durationSeconds": _duration_seconds(entry),
     }
 
+def _normalized_search_text(value):
+    # Keep Unicode letters so Hindi and other non-Latin searches are ranked
+    # instead of collapsing to an empty query.
+    return re.sub(r"[^\w]+", " ", (value or "").lower(), flags=re.UNICODE).strip()
+
 def _score(item, query, position, source_bonus):
     """Rank the way a person would expect from typing the same words on YouTube."""
-    q = query.lower().strip()
-    tokens = [t for t in re.split(r"\s+", q) if t]
-    haystack = (item["title"] + " " + (item["artist"] or "")).lower()
+    q = _normalized_search_text(query)
+    tokens = [t for t in q.split() if t]
+    title = _normalized_search_text(item["title"])
+    artist = _normalized_search_text(item["artist"])
+    haystack = (title + " " + artist).strip()
 
     score = source_bonus
-    if q and q in haystack:
-        score += 60
-    if q and item["title"].lower().startswith(q):
-        score += 25
+    if q and q in title:
+        score += 70
+    elif q and q in haystack:
+        score += 45
+    if q and title.startswith(q):
+        score += 30
+    title_matches = sum(1 for t in tokens if t in title)
     matched = sum(1 for t in tokens if t in haystack)
+    score += 18 * title_matches
     if tokens:
-        score += 45 * (matched / len(tokens))
+        score += 35 * (matched / len(tokens))
+        if matched == len(tokens):
+            score += 18
     # Prefer real tracks over hour-long mixes / 20-second clips.
     duration = item.get("durationSeconds") or 0
     if 60 <= duration <= 900:
@@ -83,7 +96,7 @@ def _score(item, query, position, source_bonus):
     elif duration > 2400:
         score -= 20
     # Keep each provider's own ordering as a tiebreaker.
-    score -= position * 0.6
+    score -= position * 0.35
     return score
 
 def search_songs(query: str, limit: int = 20) -> str:
@@ -91,13 +104,15 @@ def search_songs(query: str, limit: int = 20) -> str:
     Search songs, videos and the "top result" shelf together, then merge and
     re-rank so the list matches what the same keywords return on YouTube.
     """
+    limit = max(1, min(int(limit), 50))
+    fetch_limit = min(max(limit * 2, 25), 50)
     buckets = []
     for filter_name, bonus in (("songs", 22), ("videos", 8), (None, 14)):
         try:
             if filter_name:
-                results = _ytmusic.search(query, filter=filter_name, limit=limit)
+                results = _ytmusic.search(query, filter=filter_name, limit=fetch_limit)
             else:
-                results = _ytmusic.search(query, limit=limit)
+                results = _ytmusic.search(query, limit=fetch_limit)
         except Exception:
             continue
         buckets.append((results or [], bonus))
