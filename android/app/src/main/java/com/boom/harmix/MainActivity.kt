@@ -169,7 +169,7 @@ class MainActivity : ComponentActivity() {
                         lyricsResult = lyricsResult,
                          onLyricsClick = ::fetchLyricsForCurrentTrack,
                          playbackSpeed = playbackSpeed,
-                         onPlaybackSpeedChange = ::setPlaybackSpeed,
+                         onPlaybackSpeedChange = ::applyPlaybackSpeed,
                          onSetSleepTimer = ::setSleepTimer
                     )
                 }
@@ -346,7 +346,7 @@ class MainActivity : ComponentActivity() {
         lifecycleScope.launch { lyricsResult = metadataRepository.getLyrics(currentSongTitle, currentArtist, (effectiveDurationMs / 1000L).toInt()) }
     }
 
-    private fun setPlaybackSpeed(speed: Float) {
+    private fun applyPlaybackSpeed(speed: Float) {
         playbackSpeed = speed.coerceIn(0.5f, 2f)
         mediaController?.setPlaybackSpeed(playbackSpeed)
     }
