@@ -151,6 +151,7 @@ class MainActivity : ComponentActivity() {
                         canSkipPrevious = canSkipPrevious,
                         queueItems = queueItems,
                         playlists = playlists,
+                        likedUrls = likedUrls,
                         isGuest = isGuest,
                         sessionState = sessionState,
                         isLiked = isLiked,
