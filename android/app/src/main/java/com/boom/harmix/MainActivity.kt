@@ -92,6 +92,8 @@ class MainActivity : ComponentActivity() {
     private var playbackSpeed by mutableStateOf(1f)
     private var sleepTimerJob: Job? = null
     private var sleepAtEndOfTrackUrl: String? = null
+    private var sleepTimerDeadlineMs by mutableStateOf<Long?>(null)
+    private var sleepTimerRemainingMs by mutableLongStateOf(0L)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -180,7 +182,10 @@ class MainActivity : ComponentActivity() {
                         onLyricsClick = ::fetchLyricsForCurrentTrack,
                         playbackSpeed = playbackSpeed,
                         onPlaybackSpeedChange = ::applyPlaybackSpeed,
-                        onSetSleepTimer = ::setSleepTimer
+                        onSetSleepTimer = ::setSleepTimer,
+                        sleepTimerActive = sleepTimerDeadlineMs != null || sleepAtEndOfTrackUrl != null,
+                        sleepTimerRemainingMs = sleepTimerRemainingMs,
+                        onCancelSleepTimer = ::cancelSleepTimer
                     )
                 }
             }
@@ -281,9 +286,17 @@ class MainActivity : ComponentActivity() {
                 val controller = mediaController
                 currentPositionMs = controller?.currentPosition?.coerceAtLeast(0L) ?: 0L
                 val timerTrack = sleepAtEndOfTrackUrl
+                val deadline = sleepTimerDeadlineMs
+                if (deadline != null) {
+                    sleepTimerRemainingMs = (deadline - System.currentTimeMillis()).coerceAtLeast(0L)
+                } else if (timerTrack != null && currentTrackUrl == timerTrack && effectiveDurationMs > 0L) {
+                    sleepTimerRemainingMs = (effectiveDurationMs - currentPositionMs).coerceAtLeast(0L)
+                } else if (timerTrack == null) {
+                    sleepTimerRemainingMs = 0L
+                }
                 if (timerTrack != null && currentTrackUrl != timerTrack) {
                     controller?.pause()
-                    sleepAtEndOfTrackUrl = null
+                    clearSleepTimerState()
                 } else if (
                     timerTrack != null &&
                     currentTrackUrl == timerTrack &&
@@ -291,7 +304,7 @@ class MainActivity : ComponentActivity() {
                     currentPositionMs >= effectiveDurationMs - 750L
                 ) {
                     controller?.pause()
-                    sleepAtEndOfTrackUrl = null
+                    clearSleepTimerState()
                 }
                 delay(500)
             }
@@ -372,16 +385,37 @@ class MainActivity : ComponentActivity() {
         sleepTimerJob?.cancel()
         sleepTimerJob = null
         sleepAtEndOfTrackUrl = null
+        sleepTimerDeadlineMs = null
+        sleepTimerRemainingMs = 0L
 
         if (endOfCurrentTrack) {
             sleepAtEndOfTrackUrl = currentTrackUrl
+            if (currentTrackUrl != null && effectiveDurationMs > 0L) {
+                sleepTimerRemainingMs = (effectiveDurationMs - currentPositionMs).coerceAtLeast(0L)
+            }
         } else if (durationMs != null && durationMs > 0L) {
+            sleepTimerDeadlineMs = System.currentTimeMillis() + durationMs
+            sleepTimerRemainingMs = durationMs
             sleepTimerJob = lifecycleScope.launch {
                 delay(durationMs)
                 mediaController?.pause()
                 sleepTimerJob = null
+                sleepTimerDeadlineMs = null
+                sleepTimerRemainingMs = 0L
             }
         }
+    }
+
+    private fun cancelSleepTimer() {
+        sleepTimerJob?.cancel()
+        clearSleepTimerState()
+    }
+
+    private fun clearSleepTimerState() {
+        sleepTimerJob = null
+        sleepAtEndOfTrackUrl = null
+        sleepTimerDeadlineMs = null
+        sleepTimerRemainingMs = 0L
     }
 
     private fun rememberLastPlayed(mediaItem: MediaItem) {
@@ -445,7 +479,7 @@ class MainActivity : ComponentActivity() {
     private fun removeQueueItem(index: Int) { mediaController?.let { it.removeMediaItem(index); refreshQueueState() } }
     private fun togglePlayPause() { mediaController?.let { if (it.isPlaying) it.pause() else it.play() } }
     override fun onDestroy() {
-        sleepTimerJob?.cancel()
+        cancelSleepTimer()
         controllerFuture?.let { MediaController.releaseFuture(it) }
         super.onDestroy()
     }

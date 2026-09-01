@@ -105,6 +105,9 @@ fun FullScreenPlayerScreen(
     playbackSpeed: Float,
     onPlaybackSpeedChange: (Float) -> Unit,
     onSetSleepTimer: (durationMs: Long?, endOfCurrentTrack: Boolean) -> Unit,
+    sleepTimerActive: Boolean,
+    sleepTimerRemainingMs: Long,
+    onCancelSleepTimer: () -> Unit,
     onCollapse: () -> Unit
 ) {
     var isDragging by remember { mutableStateOf(false) }
@@ -402,6 +405,9 @@ fun FullScreenPlayerScreen(
     if (showSleepTimerSheet) {
         SleepTimerBottomSheet(
             onDismiss = { showSleepTimerSheet = false },
+            isTimerActive = sleepTimerActive,
+            remainingMs = sleepTimerRemainingMs,
+            onCancel = onCancelSleepTimer,
             onApply = { durationMs, endOfCurrentTrack ->
                 onSetSleepTimer(durationMs, endOfCurrentTrack)
                 showSleepTimerSheet = false

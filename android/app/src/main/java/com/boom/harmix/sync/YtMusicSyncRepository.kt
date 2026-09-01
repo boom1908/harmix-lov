@@ -22,7 +22,8 @@ class YtConsentRequiredException(val intent: android.content.Intent) :
 
 /**
  * Pulls the playlists of the *YouTube sync* Google account (never the main
- * Harmix account) and stores them in the local library.
+ * Harmix account) and stores them through the active library backend. Signed-in
+ * users therefore sync into their Firestore playlists.
  */
 @Singleton
 class YtMusicSyncRepository @Inject constructor(

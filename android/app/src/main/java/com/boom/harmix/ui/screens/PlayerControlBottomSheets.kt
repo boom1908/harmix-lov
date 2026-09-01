@@ -29,12 +29,16 @@ import com.boom.harmix.ui.theme.Bone
 import com.boom.harmix.ui.theme.MidnightBlack
 import com.boom.harmix.ui.theme.Sand
 import com.boom.harmix.ui.theme.SunsetGold
+import kotlin.math.roundToInt
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SleepTimerBottomSheet(
     onDismiss: () -> Unit,
-    onApply: (durationMs: Long?, endOfCurrentTrack: Boolean) -> Unit
+    onApply: (durationMs: Long?, endOfCurrentTrack: Boolean) -> Unit,
+    isTimerActive: Boolean = false,
+    remainingMs: Long = 0L,
+    onCancel: () -> Unit = {}
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = false)
     var durationMinutes by remember { mutableFloatStateOf(30f) }
@@ -55,7 +59,14 @@ fun SleepTimerBottomSheet(
         ) {
             Text("Sleep timer", color = Bone, fontWeight = FontWeight.Black)
             Text(
-                text = if (endOfCurrentTrack) "Ends after the current track" else "${durationMinutes.toInt()} minutes",
+                text = if (isTimerActive) {
+                    if (remainingMs > 0L) "Time remaining: ${formatTimerMillis(remainingMs)}"
+                    else "Ends after the current track"
+                } else if (endOfCurrentTrack) {
+                    "Ends after the current track"
+                } else {
+                    "${durationMinutes.roundToInt()} minutes"
+                },
                 color = SunsetGold
             )
 
@@ -106,8 +117,29 @@ fun SleepTimerBottomSheet(
             ) {
                 Text("Apply")
             }
+
+            if (isTimerActive) {
+                Button(
+                    onClick = {
+                        onCancel()
+                        onDismiss()
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Sand.copy(alpha = 0.18f),
+                        contentColor = Bone
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Turn off sleep timer")
+                }
+            }
         }
     }
+}
+
+private fun formatTimerMillis(millis: Long): String {
+    val totalSeconds = (millis.coerceAtLeast(0L) + 999L) / 1000L
+    return "%02d:%02d".format(totalSeconds / 60L, totalSeconds % 60L)
 }
 
 @OptIn(ExperimentalMaterial3Api::class)

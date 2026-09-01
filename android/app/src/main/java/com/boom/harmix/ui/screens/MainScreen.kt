@@ -101,6 +101,9 @@ fun MainScreen(
     playbackSpeed: Float,
     onPlaybackSpeedChange: (Float) -> Unit,
     onSetSleepTimer: (durationMs: Long?, endOfCurrentTrack: Boolean) -> Unit,
+    sleepTimerActive: Boolean,
+    sleepTimerRemainingMs: Long,
+    onCancelSleepTimer: () -> Unit,
     onToggleLikeForItem: (StreamItem) -> Unit,
     playlistDialogTarget: StreamItem?,
     currentTrackForPlaylist: StreamItem?,
@@ -212,6 +215,9 @@ fun MainScreen(
                  playbackSpeed = playbackSpeed,
                  onPlaybackSpeedChange = onPlaybackSpeedChange,
                  onSetSleepTimer = onSetSleepTimer,
+                  sleepTimerActive = sleepTimerActive,
+                  sleepTimerRemainingMs = sleepTimerRemainingMs,
+                  onCancelSleepTimer = onCancelSleepTimer,
                 onCollapse = { isFullPlayerExpanded = false }
             )
         }

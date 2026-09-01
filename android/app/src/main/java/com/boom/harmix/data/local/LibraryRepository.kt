@@ -1,5 +1,8 @@
 package com.boom.harmix.data.local
 
+import com.boom.harmix.auth.UserSession
+import com.boom.harmix.auth.UserSessionRepository
+import com.boom.harmix.data.cloud.FirestoreLibraryRepository
 import com.boom.harmix.data.local.dao.PlaylistDao
 import com.boom.harmix.data.local.dao.SavedSongDao
 import com.boom.harmix.data.local.entity.PlaylistEntity
@@ -8,6 +11,8 @@ import com.boom.harmix.data.local.entity.SavedSongEntity
 import com.boom.harmix.extractor.StreamItem
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -21,27 +26,55 @@ data class PlaylistUi(
 @Singleton
 class LibraryRepository @Inject constructor(
     private val savedSongDao: SavedSongDao,
-    private val playlistDao: PlaylistDao
+    private val playlistDao: PlaylistDao,
+    private val userSessionRepository: UserSessionRepository,
+    private val firestoreLibraryRepository: FirestoreLibraryRepository
 ) {
 
     fun getSavedSongs(): Flow<List<StreamItem>> =
-        savedSongDao.getAllSongs().map { list -> list.map { it.toStreamItem() } }
+        userSessionRepository.session.flatMapLatest { session ->
+            when (session) {
+                UserSession.Guest -> savedSongDao.getAllSongs().map { list -> list.map { it.toStreamItem() } }
+                is UserSession.Authenticated -> firestoreLibraryRepository.getSavedSongs(session.uid)
+                else -> emptyFlow()
+            }
+        }
 
     fun getLikedSongs(): Flow<List<StreamItem>> =
-        savedSongDao.getLikedSongs().map { list -> list.map { it.toStreamItem() } }
+        userSessionRepository.session.flatMapLatest { session ->
+            when (session) {
+                UserSession.Guest -> savedSongDao.getLikedSongs().map { list -> list.map { it.toStreamItem() } }
+                is UserSession.Authenticated -> firestoreLibraryRepository.getLikedSongs(session.uid)
+                else -> emptyFlow()
+            }
+        }
 
-    fun getLikedUrls(): Flow<Set<String>> = savedSongDao.getLikedUrls().map { it.toSet() }
+    fun getLikedUrls(): Flow<Set<String>> =
+        userSessionRepository.session.flatMapLatest { session ->
+            when (session) {
+                UserSession.Guest -> savedSongDao.getLikedUrls().map { it.toSet() }
+                is UserSession.Authenticated -> firestoreLibraryRepository.getLikedUrls(session.uid)
+                else -> emptyFlow()
+            }
+        }
 
     suspend fun saveSong(item: StreamItem) {
-        savedSongDao.insertSong(item.toEntity(liked = true))
+        authenticatedUid()?.let {
+            firestoreLibraryRepository.saveSong(it, item)
+        } ?: savedSongDao.insertSong(item.toEntity(liked = true))
     }
 
     suspend fun removeSong(item: StreamItem) {
-        savedSongDao.deleteSongByUrl(item.url)
+        authenticatedUid()?.let {
+            firestoreLibraryRepository.removeSong(it, item)
+        } ?: savedSongDao.deleteSongByUrl(item.url)
     }
 
     /** Heart toggle used by the player and track rows. */
     suspend fun toggleLike(item: StreamItem): Boolean {
+        authenticatedUid()?.let {
+            return firestoreLibraryRepository.toggleLike(it, item)
+        }
         val alreadySaved = savedSongDao.isSongSaved(item.url)
         return if (!alreadySaved) {
             savedSongDao.insertSong(item.toEntity(liked = true))
@@ -53,32 +86,47 @@ class LibraryRepository @Inject constructor(
         }
     }
 
-    suspend fun isSongSaved(url: String): Boolean = savedSongDao.isSongSaved(url)
+    suspend fun isSongSaved(url: String): Boolean =
+        authenticatedUid()?.let { firestoreLibraryRepository.isSongSaved(it, url) }
+            ?: savedSongDao.isSongSaved(url)
 
     fun getPlaylists(): Flow<List<PlaylistUi>> =
-        playlistDao.getPlaylistsWithSongs().map { list ->
-            list.map { withSongs ->
-                PlaylistUi(
-                    id = withSongs.playlist.playlistId,
-                    name = withSongs.playlist.name,
-                    songs = withSongs.songs.map { it.toStreamItem() }
-                )
+        userSessionRepository.session.flatMapLatest { session ->
+            when (session) {
+                UserSession.Guest -> playlistDao.getPlaylistsWithSongs().map { list ->
+                    list.map { withSongs ->
+                        PlaylistUi(
+                            id = withSongs.playlist.playlistId,
+                            name = withSongs.playlist.name,
+                            songs = withSongs.songs.map { it.toStreamItem() }
+                        )
+                    }
+                }
+                is UserSession.Authenticated -> firestoreLibraryRepository.getPlaylists(session.uid)
+                else -> emptyFlow()
             }
         }
 
     /** Single playlist with its songs in saved order. */
     fun getPlaylist(playlistId: Long): Flow<PlaylistUi?> =
-        combine(
-            playlistDao.getPlaylist(playlistId),
-            playlistDao.getPlaylistSongs(playlistId)
-        ) { playlist, songs ->
-            playlist?.let {
-                PlaylistUi(it.playlistId, it.name, songs.map { song -> song.toStreamItem() })
+        userSessionRepository.session.flatMapLatest { session ->
+            when (session) {
+                UserSession.Guest -> combine(
+                    playlistDao.getPlaylist(playlistId),
+                    playlistDao.getPlaylistSongs(playlistId)
+                ) { playlist, songs ->
+                    playlist?.let {
+                        PlaylistUi(it.playlistId, it.name, songs.map { song -> song.toStreamItem() })
+                    }
+                }
+                is UserSession.Authenticated -> firestoreLibraryRepository.getPlaylist(session.uid, playlistId)
+                else -> emptyFlow()
             }
         }
 
     suspend fun createPlaylist(name: String): Long =
-        playlistDao.insertPlaylist(PlaylistEntity(name = name))
+        authenticatedUid()?.let { firestoreLibraryRepository.createPlaylist(it, name) }
+            ?: playlistDao.insertPlaylist(PlaylistEntity(name = name))
 
     /**
      * Merge target for a synced YouTube playlist: reuses the local playlist that was
@@ -86,6 +134,9 @@ class LibraryRepository @Inject constructor(
      * never duplicates playlists.
      */
     suspend fun getOrCreateRemotePlaylist(remoteId: String, name: String): Long {
+        authenticatedUid()?.let {
+            return firestoreLibraryRepository.getOrCreateRemotePlaylist(it, remoteId, name)
+        }
         val matches = playlistDao.findPlaylistsByRemoteId(remoteId)
         if (matches.isNotEmpty()) {
             // Older builds could already have duplicate remote rows. Keep the
@@ -119,16 +170,27 @@ class LibraryRepository @Inject constructor(
 
     /** True when the song was newly added (false when it was already in the playlist). */
     suspend fun addSongToPlaylistIfAbsent(playlistId: Long, item: StreamItem): Boolean {
+        authenticatedUid()?.let {
+            return firestoreLibraryRepository.addSongToPlaylistIfAbsent(it, playlistId, item)
+        }
         if (playlistDao.isSongInPlaylist(playlistId, item.url)) return false
         addSongToPlaylist(playlistId, item)
         return true
     }
 
     suspend fun renamePlaylist(playlistId: Long, name: String) {
-        if (name.isNotBlank()) playlistDao.renamePlaylist(playlistId, name)
+        authenticatedUid()?.let {
+            firestoreLibraryRepository.renamePlaylist(it, playlistId, name)
+        } ?: if (name.isNotBlank()) {
+            playlistDao.renamePlaylist(playlistId, name)
+        }
     }
 
     suspend fun addSongToPlaylist(playlistId: Long, item: StreamItem) {
+        authenticatedUid()?.let {
+            firestoreLibraryRepository.addSongToPlaylist(it, playlistId, item)
+            return
+        }
         savedSongDao.insertSongIfAbsent(item.toEntity())
         if (playlistDao.isSongInPlaylist(playlistId, item.url)) return
         val nextPosition = playlistDao.getNextPosition(playlistId)
@@ -138,12 +200,19 @@ class LibraryRepository @Inject constructor(
     }
 
     suspend fun removeSongFromPlaylist(playlistId: Long, songUrl: String) {
-        playlistDao.removeSongFromPlaylist(playlistId, songUrl)
+        authenticatedUid()?.let {
+            firestoreLibraryRepository.removeSongFromPlaylist(it, playlistId, songUrl)
+        } ?: playlistDao.removeSongFromPlaylist(playlistId, songUrl)
     }
 
     suspend fun deletePlaylist(playlistId: Long) {
-        playlistDao.deletePlaylist(playlistId)
+        authenticatedUid()?.let {
+            firestoreLibraryRepository.deletePlaylist(it, playlistId)
+        } ?: playlistDao.deletePlaylist(playlistId)
     }
+
+    private fun authenticatedUid(): String? =
+        (userSessionRepository.session.value as? UserSession.Authenticated)?.uid
 }
 
 private fun SavedSongEntity.toStreamItem() = StreamItem(
