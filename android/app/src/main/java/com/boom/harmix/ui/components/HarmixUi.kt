@@ -23,6 +23,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.Icon
@@ -277,7 +279,9 @@ fun TrackRow(
     index: Int? = null,
     active: Boolean = false,
     onClick: () -> Unit,
-    onMoreClick: (() -> Unit)? = null
+    onMoreClick: (() -> Unit)? = null,
+    isLiked: Boolean = false,
+    onLikeClick: (() -> Unit)? = null
 ) {
     Row(
         modifier = modifier
@@ -315,6 +319,15 @@ fun TrackRow(
                 overflow = TextOverflow.Ellipsis
             )
         }
+        if (onLikeClick != null) {
+            IconButton(onClick = onLikeClick) {
+                Icon(
+                    imageVector = if (isLiked) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
+                    contentDescription = if (isLiked) "Remove from liked songs" else "Add to liked songs",
+                    tint = if (isLiked) SunsetGold else Sand
+                )
+            }
+        }
         if (onMoreClick != null) {
             IconButton(onClick = onMoreClick) {
                 Icon(Icons.Filled.MoreVert, contentDescription = "More options", tint = Sand)
@@ -331,7 +344,10 @@ fun MediaCard(
     artworkUrl: String?,
     modifier: Modifier = Modifier,
     round: Boolean = false,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    onMoreClick: (() -> Unit)? = null,
+    isLiked: Boolean = false,
+    onLikeClick: (() -> Unit)? = null
 ) {
     Column(
         modifier = modifier
@@ -357,6 +373,43 @@ fun MediaCard(
                 contentAlignment = Alignment.Center
             ) {
                 Icon(Icons.Filled.PlayArrow, contentDescription = null, tint = MidnightBlack, modifier = Modifier.size(20.dp))
+            }
+            if (onLikeClick != null || onMoreClick != null) {
+                Row(
+                    modifier = Modifier.align(Alignment.TopEnd).padding(6.dp),
+                    horizontalArrangement = Arrangement.spacedBy(2.dp)
+                ) {
+                    if (onLikeClick != null) {
+                        IconButton(
+                            onClick = onLikeClick,
+                            modifier = Modifier
+                                .size(34.dp)
+                                .background(MidnightBlack.copy(alpha = 0.7f), CircleShape)
+                        ) {
+                            Icon(
+                                imageVector = if (isLiked) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
+                                contentDescription = if (isLiked) "Remove from liked songs" else "Add to liked songs",
+                                tint = if (isLiked) SunsetGold else Bone,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                    }
+                    if (onMoreClick != null) {
+                        IconButton(
+                            onClick = onMoreClick,
+                            modifier = Modifier
+                                .size(34.dp)
+                                .background(MidnightBlack.copy(alpha = 0.7f), CircleShape)
+                        ) {
+                            Icon(
+                                Icons.Filled.MoreVert,
+                                contentDescription = "More options",
+                                tint = Bone,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                    }
+                }
             }
         }
         Text(

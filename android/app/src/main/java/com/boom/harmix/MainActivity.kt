@@ -21,6 +21,8 @@ import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
+import com.boom.harmix.auth.UserSession
+import com.boom.harmix.auth.UserSessionRepository
 import com.boom.harmix.data.local.LibraryRepository
 import com.boom.harmix.data.local.PlaylistUi
 import com.boom.harmix.extractor.StreamItem
@@ -50,7 +52,7 @@ class MainActivity : ComponentActivity() {
     lateinit var metadataRepository: MetadataRepository
 
     @Inject
-    lateinit var googleAccounts: com.boom.harmix.auth.GoogleAccountsRepository
+    lateinit var userSessionRepository: UserSessionRepository
 
     @Inject
     lateinit var lastPlayedStore: LastPlayedStore
@@ -74,6 +76,7 @@ class MainActivity : ComponentActivity() {
     private var canSkipPrevious by mutableStateOf(false)
     private var playlists by mutableStateOf<List<PlaylistUi>>(emptyList())
     private var isGuest by mutableStateOf(true)
+    private var sessionState by mutableStateOf<UserSession>(UserSession.Loading)
     private var queueItems by mutableStateOf<List<QueueItemUi>>(emptyList())
     private var playlistDialogTarget by mutableStateOf<StreamItem?>(null)
     private var lyricsResult by mutableStateOf<LyricsResult?>(null)
@@ -106,7 +109,10 @@ class MainActivity : ComponentActivity() {
             }
         }
         lifecycleScope.launch {
-            googleAccounts.mainAccount.collect { isGuest = it == null }
+            userSessionRepository.session.collect {
+                sessionState = it
+                isGuest = it !is UserSession.Authenticated
+            }
         }
 
         val sessionToken = SessionToken(this, ComponentName(this, HarmixPlaybackService::class.java))
@@ -146,10 +152,12 @@ class MainActivity : ComponentActivity() {
                         queueItems = queueItems,
                         playlists = playlists,
                         isGuest = isGuest,
+                        sessionState = sessionState,
                         isLiked = isLiked,
                         isShuffleOn = isShuffleOn,
                         repeatMode = repeatMode,
                         onToggleLike = ::toggleLikeForCurrentTrack,
+                        onToggleLikeForItem = ::toggleLikeForItem,
                         onToggleShuffle = ::toggleShuffle,
                         onCycleRepeat = ::cycleRepeat,
                         onSignIn = { },
@@ -167,10 +175,11 @@ class MainActivity : ComponentActivity() {
                         onCreatePlaylistForTarget = ::createPlaylistAndAddTarget,
                         currentTrackForPlaylist = currentStreamItemOrNull(),
                         lyricsResult = lyricsResult,
-                         onLyricsClick = ::fetchLyricsForCurrentTrack,
-                         playbackSpeed = playbackSpeed,
-                         onPlaybackSpeedChange = ::applyPlaybackSpeed,
-                         onSetSleepTimer = ::setSleepTimer
+                        onRetrySession = userSessionRepository::refresh,
+                        onLyricsClick = ::fetchLyricsForCurrentTrack,
+                        playbackSpeed = playbackSpeed,
+                        onPlaybackSpeedChange = ::applyPlaybackSpeed,
+                        onSetSleepTimer = ::setSleepTimer
                     )
                 }
             }
@@ -320,7 +329,14 @@ class MainActivity : ComponentActivity() {
 
     private fun toggleLikeForCurrentTrack() {
         val item = currentStreamItemOrNull() ?: return
-        lifecycleScope.launch { isLiked = libraryRepository.toggleLike(item) }
+        toggleLikeForItem(item)
+    }
+
+    private fun toggleLikeForItem(item: StreamItem) {
+        lifecycleScope.launch {
+            val liked = libraryRepository.toggleLike(item)
+            if (item.url == currentTrackUrl) isLiked = liked
+        }
     }
 
     private fun toggleShuffle() {

@@ -18,10 +18,12 @@ import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
 import com.boom.harmix.extractor.StreamItem
 import com.boom.harmix.ui.screens.AccountScreen
+import com.boom.harmix.ui.screens.GuestLockedScreen
 import com.boom.harmix.ui.screens.HomeScreen
 import com.boom.harmix.ui.screens.LibraryScreen
 import com.boom.harmix.ui.screens.PlaylistDetailScreen
 import com.boom.harmix.ui.screens.SearchScreen
+import com.boom.harmix.ui.screens.SettingsScreen
 
 sealed class HarmixDestination(val route: String, val label: String, val icon: ImageVector) {
     data object Home : HarmixDestination("home", "Home", Icons.Filled.Home)
@@ -31,12 +33,17 @@ sealed class HarmixDestination(val route: String, val label: String, val icon: I
 }
 
 @Suppress("UNUSED_PARAMETER")
-fun bottomNavItemsFor(isGuest: Boolean): List<HarmixDestination> = listOf(
-    HarmixDestination.Home,
-    HarmixDestination.Search,
-    HarmixDestination.Library,
-    HarmixDestination.Account
-)
+fun bottomNavItemsFor(isGuest: Boolean): List<HarmixDestination> =
+    if (isGuest) {
+        listOf(HarmixDestination.Home, HarmixDestination.Search, HarmixDestination.Account)
+    } else {
+        listOf(
+            HarmixDestination.Home,
+            HarmixDestination.Search,
+            HarmixDestination.Library,
+            HarmixDestination.Account
+        )
+    }
 
 @Composable
 fun HarmixNavHost(
@@ -49,6 +56,9 @@ fun HarmixNavHost(
     onPlayNext: (StreamItem) -> Unit,
     onAddToQueue: (StreamItem) -> Unit,
     onAddToPlaylistRequest: (StreamItem) -> Unit,
+    likedUrls: Set<String>,
+    onToggleLike: (StreamItem) -> Unit,
+    onOpenSettings: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     NavHost(
@@ -62,7 +72,9 @@ fun HarmixNavHost(
                 onItemClick = playTrack,
                 onPlayNext = onPlayNext,
                 onAddToQueue = onAddToQueue,
-                onAddToPlaylistRequest = onAddToPlaylistRequest
+                onAddToPlaylistRequest = onAddToPlaylistRequest,
+                likedUrls = likedUrls,
+                onToggleLike = onToggleLike
             )
         }
         composable(HarmixDestination.Search.route) {
@@ -71,27 +83,39 @@ fun HarmixNavHost(
                 onItemClick = playTrack,
                 onPlayNext = onPlayNext,
                 onAddToQueue = onAddToQueue,
-                onAddToPlaylistRequest = onAddToPlaylistRequest
+                onAddToPlaylistRequest = onAddToPlaylistRequest,
+                likedUrls = likedUrls,
+                onToggleLike = onToggleLike
             )
         }
         composable(HarmixDestination.Library.route) {
-            LibraryScreen(
-                onPlayQueue = onPlayQueue,
-                onOpenPlaylist = { playlistId -> navController.navigate("playlist/$playlistId") }
-            )
+            if (isGuest) GuestLockedScreen()
+            else {
+                LibraryScreen(
+                    onPlayQueue = onPlayQueue,
+                    onOpenPlaylist = { playlistId -> navController.navigate("playlist/$playlistId") }
+                )
+            }
         }
         composable(
             route = "playlist/{playlistId}",
             arguments = listOf(navArgument("playlistId") { type = NavType.StringType })
         ) {
-            PlaylistDetailScreen(
-                onBack = { navController.popBackStack() },
-                onPlayQueue = onPlayQueue,
-                onAddToQueue = onAddToQueue
-            )
+            if (isGuest) GuestLockedScreen()
+            else {
+                PlaylistDetailScreen(
+                    onBack = { navController.popBackStack() },
+                    onPlayQueue = onPlayQueue,
+                    onAddToQueue = onAddToQueue
+                )
+            }
         }
         composable(HarmixDestination.Account.route) {
-            AccountScreen()
+            AccountScreen(onOpenSettings = onOpenSettings)
+        }
+        composable("settings") {
+            if (isGuest) GuestLockedScreen()
+            else SettingsScreen(onBack = { navController.popBackStack() })
         }
     }
 }

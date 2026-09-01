@@ -39,7 +39,9 @@ fun HomeScreen(
     onItemClick: (StreamItem) -> Unit,
     onPlayNext: (StreamItem) -> Unit,
     onAddToQueue: (StreamItem) -> Unit,
-    onAddToPlaylistRequest: (StreamItem) -> Unit
+    onAddToPlaylistRequest: (StreamItem) -> Unit,
+    likedUrls: Set<String>,
+    onToggleLike: (StreamItem) -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     var optionsSheetTarget by remember { mutableStateOf<StreamItem?>(null) }
@@ -81,7 +83,10 @@ fun HomeScreen(
                                     title = item.title,
                                     subtitle = item.uploader.ifBlank { "Unknown artist" },
                                     artworkUrl = item.thumbnailUrl,
-                                    onClick = { onItemClick(item) }
+                                    onClick = { onItemClick(item) },
+                                    onMoreClick = { optionsSheetTarget = item },
+                                    isLiked = item.url in likedUrls,
+                                    onLikeClick = if (!isGuest) ({ onToggleLike(item) }) else null
                                 )
                             }
                         }
@@ -94,7 +99,9 @@ fun HomeScreen(
                                 artworkUrl = item.thumbnailUrl,
                                 modifier = Modifier.padding(horizontal = 8.dp),
                                 onClick = { onItemClick(item) },
-                                onMoreClick = { optionsSheetTarget = item }
+                                onMoreClick = { optionsSheetTarget = item },
+                                isLiked = item.url in likedUrls,
+                                onLikeClick = if (!isGuest) ({ onToggleLike(item) }) else null
                             )
                         }
                     }

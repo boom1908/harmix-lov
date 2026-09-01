@@ -248,12 +248,14 @@ fun FullScreenPlayerScreen(
                         modifier = Modifier.padding(top = 4.dp)
                     )
                 }
-                IconButton(onClick = onToggleLike) {
-                    Icon(
-                        imageVector = if (isLiked) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
-                        contentDescription = if (isLiked) "Remove from liked songs" else "Add to liked songs",
-                        tint = if (isLiked) SunsetGold else Sand
-                    )
+                if (!isGuest) {
+                    IconButton(onClick = onToggleLike) {
+                        Icon(
+                            imageVector = if (isLiked) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
+                            contentDescription = if (isLiked) "Remove from liked songs" else "Add to liked songs",
+                            tint = if (isLiked) SunsetGold else Sand
+                        )
+                    }
                 }
             }
 

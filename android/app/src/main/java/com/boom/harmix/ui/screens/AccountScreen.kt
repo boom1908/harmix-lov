@@ -22,6 +22,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.LibraryMusic
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -53,10 +54,14 @@ import com.boom.harmix.ui.viewmodel.AccountViewModel
 import com.boom.harmix.ui.viewmodel.SyncState
 
 @Composable
-fun AccountScreen(viewModel: AccountViewModel = hiltViewModel()) {
+fun AccountScreen(
+    onOpenSettings: () -> Unit,
+    viewModel: AccountViewModel = hiltViewModel()
+) {
     val mainAccount by viewModel.mainAccount.collectAsState()
     val ytAccount by viewModel.ytAccount.collectAsState()
     val syncState by viewModel.syncState.collectAsState()
+    val authError by viewModel.authError.collectAsState()
 
     val mainLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.StartActivityForResult()
@@ -93,12 +98,27 @@ fun AccountScreen(viewModel: AccountViewModel = hiltViewModel()) {
             .padding(horizontal = 20.dp, vertical = 24.dp),
         verticalArrangement = Arrangement.spacedBy(20.dp)
     ) {
-        Text(
-            text = "Account",
-            color = MistWhite,
-            style = MaterialTheme.typography.headlineMedium,
-            fontWeight = FontWeight.Bold
-        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "Account",
+                color = MistWhite,
+                style = MaterialTheme.typography.headlineMedium,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.weight(1f)
+            )
+            if (mainAccount != null) {
+                androidx.compose.material3.IconButton(onClick = onOpenSettings) {
+                    Icon(Icons.Filled.Settings, contentDescription = "Settings", tint = SunsetGold)
+                }
+            }
+        }
+
+        authError?.let {
+            Text(text = it, color = EmberRed, style = MaterialTheme.typography.bodySmall)
+        }
 
         HarmixAccountCard(
             account = mainAccount,
@@ -106,17 +126,23 @@ fun AccountScreen(viewModel: AccountViewModel = hiltViewModel()) {
             onSignOut = { viewModel.signOut(AccountSlot.MAIN) }
         )
 
-        YouTubeSyncCard(
-            account = ytAccount,
-            syncState = syncState,
-            onConnect = { ytLauncher.launch(viewModel.signInIntent(AccountSlot.YT_SYNC)) },
-            onDisconnect = { viewModel.signOut(AccountSlot.YT_SYNC) },
-            onResync = { viewModel.syncNow() }
-        )
+        if (mainAccount != null) {
+            YouTubeSyncCard(
+                account = ytAccount,
+                syncState = syncState,
+                onConnect = { ytLauncher.launch(viewModel.signInIntent(AccountSlot.YT_SYNC)) },
+                onDisconnect = { viewModel.signOut(AccountSlot.YT_SYNC) },
+                onResync = { viewModel.syncNow() }
+            )
+        }
 
         Text(
-            text = "Your Harmix account and your YouTube Music account are kept separate. " +
-                "Swap the YouTube one any time to pull in a different set of playlists.",
+            text = if (mainAccount != null) {
+                "Your Harmix account and your YouTube Music account are kept separate. " +
+                    "Swap the YouTube one any time to pull in a different set of playlists."
+            } else {
+                "Sign up to unlock playlists, liked songs, and personalized recommendations."
+            },
             color = CoolGray,
             style = MaterialTheme.typography.labelMedium
         )
@@ -165,7 +191,8 @@ private fun HarmixAccountCard(
     SectionCard {
         AccountHeader(
             title = if (account == null) "Harmix account" else account.displayName,
-            subtitle = account?.email ?: "Saves your history, playlists and liked songs",
+            subtitle = account?.email
+                ?: "Sign up to unlock playlists, liked songs, and personalized recommendations",
             icon = Icons.Filled.AccountCircle
         )
 

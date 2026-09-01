@@ -37,6 +37,7 @@ class AccountViewModel @Inject constructor(
 
     val mainAccount: StateFlow<GoogleAccountInfo?> = accounts.mainAccount
     val ytAccount: StateFlow<GoogleAccountInfo?> = accounts.ytAccount
+    val authError: StateFlow<String?> = accounts.authError
 
     private val _syncState = MutableStateFlow<SyncState>(SyncState.Idle)
     val syncState: StateFlow<SyncState> = _syncState.asStateFlow()
@@ -44,10 +45,12 @@ class AccountViewModel @Inject constructor(
     fun signInIntent(slot: AccountSlot): Intent = accounts.signInIntent(slot)
 
     fun onSignInResult(slot: AccountSlot, data: Intent?) {
-        val info = accounts.handleSignInResult(slot, data)
-        if (info != null && slot == AccountSlot.YT_SYNC) {
-            // Playlists sync the moment the YouTube account connects.
-            syncNow()
+        viewModelScope.launch {
+            val info = accounts.handleSignInResult(slot, data)
+            if (info != null && slot == AccountSlot.YT_SYNC) {
+                // Playlists sync the moment the YouTube account connects.
+                syncNow()
+            }
         }
     }
 

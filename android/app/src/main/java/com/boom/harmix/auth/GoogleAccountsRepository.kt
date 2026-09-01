@@ -11,6 +11,9 @@ import com.google.android.gms.auth.api.signin.GoogleSignIn
 import com.google.android.gms.auth.api.signin.GoogleSignInClient
 import com.google.android.gms.auth.api.signin.GoogleSignInOptions
 import com.google.android.gms.common.api.Scope
+import com.google.android.gms.tasks.Tasks
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.auth.GoogleAuthProvider
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withTimeoutOrNull
@@ -62,16 +65,27 @@ const val WEB_CLIENT_ID = "308449061407-kt6ncig4t96s1fvki4384m143i33j050.apps.go
  */
 @Singleton
 class GoogleAccountsRepository @Inject constructor(
-    @ApplicationContext private val context: Context
+    @ApplicationContext private val context: Context,
+    private val userSession: UserSessionRepository
 ) {
 
     private val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+    private val firebaseAuth = FirebaseAuth.getInstance()
 
-    private val _mainAccount = MutableStateFlow(read(AccountSlot.MAIN))
+    private val _mainAccount = MutableStateFlow(readMainAccount())
     val mainAccount: StateFlow<GoogleAccountInfo?> = _mainAccount.asStateFlow()
 
     private val _ytAccount = MutableStateFlow(read(AccountSlot.YT_SYNC))
     val ytAccount: StateFlow<GoogleAccountInfo?> = _ytAccount.asStateFlow()
+
+    private val _authError = MutableStateFlow<String?>(null)
+    val authError: StateFlow<String?> = _authError.asStateFlow()
+
+    init {
+        firebaseAuth.addAuthStateListener {
+            _mainAccount.value = readMainAccount()
+        }
+    }
 
     /** Build a fresh sign-in intent. Always shows the account chooser. */
     fun signInIntent(slot: AccountSlot): Intent {
@@ -80,8 +94,8 @@ class GoogleAccountsRepository @Inject constructor(
         return client.signInIntent
     }
 
-    /** Feed the Activity result back in here. Returns the account, or null if cancelled. */
-    fun handleSignInResult(slot: AccountSlot, data: Intent?): GoogleAccountInfo? {
+    /** Feed the Activity result back in here and establish Firebase auth for MAIN. */
+    suspend fun handleSignInResult(slot: AccountSlot, data: Intent?): GoogleAccountInfo? {
         val account = runCatching {
             GoogleSignIn.getSignedInAccountFromIntent(data).getResult(
                 com.google.android.gms.common.api.ApiException::class.java
@@ -89,6 +103,28 @@ class GoogleAccountsRepository @Inject constructor(
         }.getOrNull() ?: return null
 
         val email = account.email ?: return null
+        _authError.value = null
+        if (slot == AccountSlot.MAIN) {
+            val idToken = account.idToken
+            if (idToken.isNullOrBlank()) {
+                _authError.value = "Google didn't return an ID token. Check Firebase Google Sign-In setup."
+                return null
+            }
+            try {
+                withContext(Dispatchers.IO) {
+                    Tasks.await(
+                        firebaseAuth.signInWithCredential(
+                            GoogleAuthProvider.getCredential(idToken, null)
+                        )
+                    )
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Firebase sign-in failed", e)
+                _authError.value = e.message ?: "Couldn't finish Firebase sign-in. Please try again."
+                return null
+            }
+        }
+
         val info = GoogleAccountInfo(
             email = email,
             displayName = account.displayName ?: email.substringBefore('@'),
@@ -97,11 +133,13 @@ class GoogleAccountsRepository @Inject constructor(
         write(slot, info)
         // Drop the global GMS session so the two slots never bleed into each other.
         clientFor(slot).signOut()
+        if (slot == AccountSlot.MAIN) userSession.refresh()
         return info
     }
 
     fun signOut(slot: AccountSlot) {
         runCatching { clientFor(slot).signOut() }
+        if (slot == AccountSlot.MAIN) firebaseAuth.signOut()
         write(slot, null)
     }
 
@@ -168,6 +206,21 @@ class GoogleAccountsRepository @Inject constructor(
             displayName = prefs.getString("${k}_name", email.substringBefore('@')).orEmpty(),
             photoUrl = prefs.getString("${k}_photo", null)
         )
+    }
+
+    private fun readMainAccount(): GoogleAccountInfo? {
+        val firebaseUser = firebaseAuth.currentUser ?: return null
+        val saved = read(AccountSlot.MAIN)
+        return if (saved?.email == firebaseUser.email) {
+            saved
+        } else {
+            GoogleAccountInfo(
+                email = firebaseUser.email.orEmpty(),
+                displayName = firebaseUser.displayName.orEmpty()
+                    .ifBlank { firebaseUser.email?.substringBefore('@').orEmpty() },
+                photoUrl = firebaseUser.photoUrl?.toString()
+            )
+        }
     }
 
     private fun write(slot: AccountSlot, info: GoogleAccountInfo?) {

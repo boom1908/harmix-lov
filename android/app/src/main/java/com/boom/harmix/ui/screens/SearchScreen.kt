@@ -54,7 +54,9 @@ fun SearchScreen(
     onItemClick: (StreamItem) -> Unit,
     onPlayNext: (StreamItem) -> Unit,
     onAddToQueue: (StreamItem) -> Unit,
-    onAddToPlaylistRequest: (StreamItem) -> Unit
+    onAddToPlaylistRequest: (StreamItem) -> Unit,
+    likedUrls: Set<String>,
+    onToggleLike: (StreamItem) -> Unit
 ) {
     val query by viewModel.query.collectAsStateWithLifecycle()
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -187,7 +189,9 @@ fun SearchScreen(
                                 subtitle = item.uploader,
                                 artworkUrl = item.thumbnailUrl,
                                 onClick = { onItemClick(item) },
-                                onMoreClick = { optionsSheetTarget = item }
+                                onMoreClick = { optionsSheetTarget = item },
+                                isLiked = item.url in likedUrls,
+                                onLikeClick = if (!isGuest) ({ onToggleLike(item) }) else null
                             )
                         }
                     }

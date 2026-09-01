@@ -43,6 +43,7 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.compose.runtime.collectAsState
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.boom.harmix.auth.UserSession
 import com.boom.harmix.data.local.PlaylistUi
 import com.boom.harmix.extractor.StreamItem
 import com.boom.harmix.metadata.LyricsResult
@@ -78,9 +79,12 @@ fun MainScreen(
     queueItems: List<QueueItemUi>,
     playlists: List<PlaylistUi>,
     isGuest: Boolean,
+    sessionState: UserSession,
+    likedUrls: Set<String>,
     isLiked: Boolean,
     isShuffleOn: Boolean,
     repeatMode: Int,
+    onRetrySession: () -> Unit,
     onToggleLike: () -> Unit,
     onToggleShuffle: () -> Unit,
     onCycleRepeat: () -> Unit,
@@ -97,6 +101,7 @@ fun MainScreen(
     playbackSpeed: Float,
     onPlaybackSpeedChange: (Float) -> Unit,
     onSetSleepTimer: (durationMs: Long?, endOfCurrentTrack: Boolean) -> Unit,
+    onToggleLikeForItem: (StreamItem) -> Unit,
     playlistDialogTarget: StreamItem?,
     currentTrackForPlaylist: StreamItem?,
     onAddToPlaylistRequest: (StreamItem) -> Unit,
@@ -104,6 +109,23 @@ fun MainScreen(
     onSelectPlaylistForTarget: (playlistId: Long) -> Unit,
     onCreatePlaylistForTarget: (name: String) -> Unit
 ) {
+    when (val session = sessionState) {
+        UserSession.Loading -> {
+            SessionLoadingScreen()
+            return
+        }
+        is UserSession.Error -> {
+            SessionErrorScreen(message = session.message, onRetry = onRetrySession)
+            return
+        }
+        is UserSession.NeedsUsername -> {
+            UsernameSetupScreen()
+            return
+        }
+        UserSession.Guest,
+        is UserSession.Authenticated -> Unit
+    }
+
     val navController = rememberNavController()
     var isFullPlayerExpanded by remember { mutableStateOf(false) }
     val networkViewModel: NetworkViewModel = hiltViewModel()
@@ -146,6 +168,9 @@ fun MainScreen(
                 onPlayNext = onPlayNext,
                 onAddToQueue = onAddToQueue,
                 onAddToPlaylistRequest = onAddToPlaylistRequest,
+                likedUrls = likedUrls,
+                onToggleLike = onToggleLikeForItem,
+                onOpenSettings = { navController.navigate("settings") },
                 modifier = Modifier.padding(innerPadding)
             )
         }
