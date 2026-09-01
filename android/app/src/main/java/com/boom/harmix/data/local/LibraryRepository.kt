@@ -179,9 +179,10 @@ class LibraryRepository @Inject constructor(
     }
 
     suspend fun renamePlaylist(playlistId: Long, name: String) {
-        authenticatedUid()?.let {
-            firestoreLibraryRepository.renamePlaylist(it, playlistId, name)
-        } ?: if (name.isNotBlank()) {
+        val uid = authenticatedUid()
+        if (uid != null) {
+            firestoreLibraryRepository.renamePlaylist(uid, playlistId, name)
+        } else if (name.isNotBlank()) {
             playlistDao.renamePlaylist(playlistId, name)
         }
     }
